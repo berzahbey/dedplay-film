@@ -32,10 +32,22 @@ _cancel = set()
 _HAS_ZSCALE = None
 
 
+LOG_DIR = os.path.join(WORK_DIR, "..", "logs")
+_KEY = ("error", "invalid", "no such", "not match", "failed", "unknown", "cannot", "could not")
+
+
 def _run(cmd, timeout=3600):
     p = subprocess.run(cmd, capture_output=True, timeout=timeout)
     if p.returncode != 0:
-        raise RuntimeError(p.stderr.decode("utf-8", "replace")[-1500:])
+        err = p.stderr.decode("utf-8", "replace")
+        try:  # tam hata kaydı: /DATA/AppData/dedplay-film/logs
+            os.makedirs(LOG_DIR, exist_ok=True)
+            with open(os.path.join(LOG_DIR, "ffmpeg-hatalar.log"), "a", encoding="utf-8") as f:
+                f.write(f"\n===== {time.strftime('%Y-%m-%d %H:%M:%S')}\n{' '.join(cmd)}\n{err}\n")
+        except OSError:
+            pass
+        lines = [l for l in err.splitlines() if any(k in l.lower() for k in _KEY)]
+        raise RuntimeError(" | ".join(dict.fromkeys(lines))[:600] or err[-600:])
     return p
 
 
@@ -76,8 +88,12 @@ def probe(path):
             rot = int(sd["rotation"])
     if abs(rot) % 180 == 90:
         w, h = h, w  # telefon dik çekimi: görüntü döndürülerek gösterilir
+    try:
+        vdur = float(v.get("duration") or 0)
+    except ValueError:
+        vdur = 0.0
     return {"has_audio": a, "transfer": v.get("color_transfer", ""), "duration": dur, "ok": bool(v),
-            "w": w, "h": h}
+            "w": w, "h": h, "vdur": vdur or dur}
 
 
 # ---------- Kareler ----------
@@ -214,16 +230,24 @@ def still_clip(frame, out, frames, idx, grade="", fade_in=0, fade_out=0, audio=T
     _run(cmd + [out])
 
 
-def video_clip(src, out, start, frames, info, cuts=(), grade="", keep_audio=True):
+def video_clip(src, out, start, frames, info, cuts=(), grade="", keep_audio=True, safe=False):
     """cuts: [(ara_plan_klibi, başlangıç_karesi, kare_sayısı)] — video oynarken üstte görünür."""
     dur = frames / FPS
     tm = ""
     if info["transfer"] in ("arib-std-b67", "smpte2084") and has_zscale():
         # iPhone HDR (HLG/Dolby Vision) → normal SDR, renkler soluk çıkmasın
-        tm = ("zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,"
-              "tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p,")
+        tin = "arib-std-b67" if info["transfer"] == "arib-std-b67" else "smpte2084"
+        # setparams: dosyada renk bilgisi eksik olsa bile zscale'in yolu bulması için
+        tm = (f"setparams=color_primaries=bt2020:color_trc={tin}:colorspace=bt2020nc,"
+              "zscale=t=linear:npl=100,format=gbrpf32le,"
+              "zscale=p=bt709,tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p,")
+    if safe:
+        tm = ""
     w, h = info.get("w") or 0, info.get("h") or 0
-    if w and h and w / h < 1.6:
+    vdur = info.get("vdur") or info.get("duration") or 0
+    if vdur:
+        start = max(0.0, min(start, vdur - 1.0))
+    if w and h and w / h < 1.6 and not safe:
         # Dikey / kare / 4:3 video → tam ekran: önemli bölgeyi (yüz, hareket) takip eden kırpma
         sh, ys = reframe.plan_crop(src, start, dur, w, h, frames, FPS, WIDTH, HEIGHT)
         cmdf = reframe.sendcmd_file(ys, FPS, out + ".crop.txt")
@@ -258,6 +282,60 @@ def video_clip(src, out, start, frames, info, cuts=(), grade="", keep_audio=True
           "-map", amap, "-frames:v", str(frames), *_venc(17), *AENC, out])
 
 
+# ---------- Doğrulama ve yedek planlar ----------
+
+def _valid(path, frames):
+    """Klip var mı, 1920x1080 mi, kare sayısı doğru mu?"""
+    if not os.path.exists(path) or os.path.getsize(path) < 1000:
+        return False
+    p = subprocess.run(["ffprobe", "-v", "error", "-count_packets", "-select_streams", "v:0",
+                        "-show_entries", "stream=width,height,nb_read_packets", "-of", "csv=p=0", path],
+                       capture_output=True, timeout=120)
+    try:
+        w, h, n = p.stdout.decode().strip().split(",")[:3]
+        return int(w) == WIDTH and int(h) == HEIGHT and abs(int(n) - frames) <= 1
+    except ValueError:
+        return False
+
+
+def _solid(out, frames):
+    _run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", f"color=c=0x0e1016:s={WIDTH}x{HEIGHT}:r={FPS}",
+          "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo", "-frames:v", str(frames),
+          "-af", f"atrim=end_sample={frames * SPF}", *_venc(), *AENC, out])
+
+
+def _rescue(c, out, L, n, grade, work, last_frame, p, infos, err):
+    """Bir klip üretilemezse film durmasın: önce güvenli mod, sonra videodan bir kare, sonra düz kare."""
+    print(f"klip {n} yedek moda alındı: {err}", flush=True)
+    if c["kind"] == "video":
+        r = c["row"]
+        try:  # HDR dönüşümü ve akıllı kırpma olmadan, ara plansız
+            video_clip(r["path"], out, c["start"], L, infos[r["id"]], (), grade, p.get("video_audio", True), safe=True)
+            if _valid(out, L):
+                return
+        except Exception:
+            traceback.print_exc()
+        try:
+            fr = os.path.join(work, f"vf{n}.jpg")
+            subprocess.run(["ffmpeg", "-y", "-v", "error", "-ss", f"{c['start'] + 1:.2f}", "-i", r["path"],
+                            "-frames:v", "1", fr], timeout=120)
+            if os.path.exists(fr):
+                photo_frame(fr, fr)
+                still_clip(fr, out, L, n, grade)
+                if _valid(out, L):
+                    return
+        except Exception:
+            traceback.print_exc()
+    try:
+        if last_frame:
+            still_clip(last_frame, out, L, n, grade)
+            if _valid(out, L):
+                return
+    except Exception:
+        traceback.print_exc()
+    _solid(out, L)
+
+
 # ---------- Birleştirme (geçiş efektleri) ----------
 
 def _join(items, df, out, work, tag):
@@ -287,8 +365,21 @@ def _join(items, df, out, work, tag):
         acc += items[i][1] - df
         prev_v, prev_a = tv, ta
     fc = fc.rstrip(";")
-    _run(["ffmpeg", "-y", "-v", "error", *args, "-filter_complex", fc, "-map", f"[{prev_v}]",
-          "-map", f"[{prev_a}]", "-frames:v", str(acc), *_venc(), *AENC, out], timeout=7200)
+    cmd = ["ffmpeg", "-y", "-v", "error", *args, "-filter_complex", fc, "-map", f"[{prev_v}]",
+           "-map", f"[{prev_a}]", "-frames:v", str(acc), *_venc(), *AENC, out]
+    try:
+        _run(cmd, timeout=7200)
+    except RuntimeError as e:
+        print(f"birleştirme hatası, sade geçişle tekrar deneniyor: {e}", flush=True)
+        norm = []
+        for i, (pth, fr, tr) in enumerate(items):  # tüm klipleri aynı biçime getir
+            npth = pth + ".norm.mkv"
+            _run(["ffmpeg", "-y", "-v", "error", "-i", pth, "-vf",
+                  f"fps={FPS},scale={WIDTH}:{HEIGHT},setsar=1,format=yuv420p",
+                  "-af", f"aresample=48000,aformat=channel_layouts=stereo,apad,atrim=end_sample={fr * SPF}",
+                  "-frames:v", str(fr), *_venc(), *AENC, npth])
+            norm.append((npth, fr, "fade"))
+        return _join(norm, df, out, work, tag + "n")
     for p, _, _ in items:
         if p.startswith(work):
             try:
@@ -527,14 +618,14 @@ def _render(jid, p):
                         cuts.append((cm, lead + j * slot + (slot - cut_f) // 2, cut_f))
                 video_clip(r["path"], out, c["start"], L, infos[r["id"]], cuts, grade,
                            p.get("video_audio", True))
+            if not _valid(out, L):
+                raise RuntimeError("klip eksik çıktı")
         except InterruptedError:
             raise
-        except Exception:
-            errors += 1
+        except Exception as e:
             traceback.print_exc()
-            # Zaman çizgisi bozulmasın: yerine bir önceki kareyi (yoksa koyu kare) koy
-            fr = last_frame or title_frame(os.path.join(work, f"e{n}.jpg"), "", "")
-            still_clip(fr, out, L, n, grade)
+            _rescue(c, out, L, n, grade, work, last_frame, p, infos, e)
+            errors += 1
         items.append((out, L, c["trans"] or "fade"))
         tick(f"Klip {n + 1}/{len(clips)}")
 
