@@ -338,7 +338,7 @@ def _rescue(c, out, L, n, grade, work, last_frame, p, infos, err):
 
 # ---------- Birleştirme (geçiş efektleri) ----------
 
-def _join(items, df, out, work, tag):
+def _join(items, df, out, work, tag, retry=True):
     """items: [(yol, kare, geçiş_tipi)] → tek klip. Ardışık klipler df kare örtüşür."""
     if len(items) == 1:
         shutil.move(items[0][0], out)
@@ -348,14 +348,15 @@ def _join(items, df, out, work, tag):
         merged = []
         for gi, g in enumerate(groups):
             gout = os.path.join(work, f"{tag}_{gi}.mkv")
-            fr = _join(g, df, gout, work, f"{tag}_{gi}")
+            fr = _join(g, df, gout, work, f"{tag}_{gi}", retry)
             merged.append((gout, fr, g[0][2]))
-        return _join(merged, df, out, work, tag + "m")
+        return _join(merged, df, out, work, tag + "m", retry)
     ds = df / FPS
     args, fc = [], ""
     for i, (p, _, _) in enumerate(items):
         args += ["-i", p]
-        fc += f"[{i}:v]settb=AVTB,setpts=PTS-STARTPTS[v{i}];"
+        # fps: FFmpeg 7'de xfade sabit kare hızı bilgisini ister (mkv girişlerinde boş gelir)
+        fc += f"[{i}:v]settb=AVTB,setpts=PTS-STARTPTS,fps={FPS}[v{i}];"
     acc, prev_v, prev_a = items[0][1], "v0", "0:a"
     for i in range(1, len(items)):
         off = (acc - df) / FPS
@@ -370,16 +371,19 @@ def _join(items, df, out, work, tag):
     try:
         _run(cmd, timeout=7200)
     except RuntimeError as e:
-        print(f"birleştirme hatası, sade geçişle tekrar deneniyor: {e}", flush=True)
+        if not retry:
+            print(f"geçişli birleştirme yine olmadı, düz kesmeyle birleştiriliyor: {e}", flush=True)
+            return _concat_plain(items, df, out, work, tag)
+        print(f"birleştirme hatası, klipler aynı biçime getirilip tekrar deneniyor: {e}", flush=True)
         norm = []
         for i, (pth, fr, tr) in enumerate(items):  # tüm klipleri aynı biçime getir
-            npth = pth + ".norm.mkv"
+            npth = os.path.join(work, f"{tag}_n{i}.mkv")
             _run(["ffmpeg", "-y", "-v", "error", "-i", pth, "-vf",
                   f"fps={FPS},scale={WIDTH}:{HEIGHT},setsar=1,format=yuv420p",
                   "-af", f"aresample=48000,aformat=channel_layouts=stereo,apad,atrim=end_sample={fr * SPF}",
                   "-frames:v", str(fr), *_venc(), *AENC, npth])
             norm.append((npth, fr, "fade"))
-        return _join(norm, df, out, work, tag + "n")
+        return _join(norm, df, out, work, tag + "n", retry=False)
     for p, _, _ in items:
         if p.startswith(work):
             try:
@@ -387,6 +391,26 @@ def _join(items, df, out, work, tag):
             except OSError:
                 pass
     return acc
+
+
+def _concat_plain(items, df, out, work, tag):
+    """Son çare: geçiş efekti olmadan birleştir. Örtüşen kısımlar kırpılır, süre aynı kalır."""
+    lst = os.path.join(work, f"{tag}_list.txt")
+    h = df // 2
+    parts = []
+    for i, (pth, fr, _) in enumerate(items):
+        a = 0 if i == 0 else h
+        b = fr if i == len(items) - 1 else fr - (df - h)
+        tp = os.path.join(work, f"{tag}_p{i}.mkv")
+        _run(["ffmpeg", "-y", "-v", "error", "-i", pth, "-vf",
+              f"trim=start_frame={a}:end_frame={b},setpts=PTS-STARTPTS,fps={FPS},scale={WIDTH}:{HEIGHT},setsar=1,format=yuv420p",
+              "-af", f"atrim=start_sample={a * SPF}:end_sample={b * SPF},asetpts=PTS-STARTPTS",
+              *_venc(), *AENC, tp])
+        parts.append(tp)
+    with open(lst, "w") as f:
+        f.writelines(f"file '{x}'\n" for x in parts)
+    _run(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", lst, "-c", "copy", out])
+    return sum(fr for _, fr, _ in items) - df * (len(items) - 1)
 
 
 # ---------- Müzik ----------
