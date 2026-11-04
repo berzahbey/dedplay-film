@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 from . import db, planner, render, scanner, styles
 from .analyze import load_image
-from .config import MEDIA_DIRS, MUSIC_DEFAULT, MUSIC_DIR, MUSIC_EXT, THUMB_DIR
+from .config import MEDIA_DIRS, MUSIC_DEFAULT, MUSIC_DIR, MUSIC_EXT, OUTPUT_DIR, THUMB_DIR
 
 db.init()
 app = FastAPI(title="Dedplay Film")
@@ -220,6 +220,25 @@ def jobs():
 @app.post("/api/jobs/{jid}/cancel")
 def cancel(jid: int):
     render.cancel(jid)
+    return {"ok": True}
+
+
+@app.delete("/api/jobs/{jid}")
+def delete_job(jid: int):
+    """Filmi diskten ve listeden siler. Sadece çıktı klasöründeki dosya silinir."""
+    with db.db() as con:
+        r = con.execute("SELECT status, output FROM jobs WHERE id=?", (jid,)).fetchone()
+    if not r:
+        raise HTTPException(404)
+    if r["status"] in ("sırada", "çalışıyor"):
+        raise HTTPException(400, "Önce işi iptal et")
+    out = r["output"]
+    if out and os.path.isfile(out):
+        if not _inside(out, OUTPUT_DIR):
+            raise HTTPException(400, "Bu dosya film klasörünün dışında")
+        os.remove(out)
+    with db.db() as con:
+        con.execute("DELETE FROM jobs WHERE id=?", (jid,))
     return {"ok": True}
 
 

@@ -49,7 +49,7 @@ label.f{display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--mu
 .job{border:1px solid var(--line);border-radius:10px;padding:14px;display:grid;gap:8px}
 .bar{height:7px;background:#0f1115;border-radius:9px;overflow:hidden}.bar i{display:block;height:100%;background:var(--ac);transition:width .5s}
 .st{font-size:12px;padding:2px 9px;border-radius:99px;background:var(--line)}
-.st.bitti{background:#163d2b;color:var(--ok)}.st.hata{background:#3d1618;color:var(--bad)}
+button.ghost.del{color:var(--bad);border-color:#5a2226;font-size:13px;padding:5px 12px}.st.bitti{background:#163d2b;color:var(--ok)}.st.hata{background:#3d1618;color:var(--bad)}
 video{width:100%;max-width:720px;border-radius:10px;background:#000}
 .hide{display:none!important}
 a{color:var(--ac)}
@@ -228,13 +228,19 @@ $('#renderBtn').onclick=async()=>{
   }catch(e){alert('Hata: '+e.message)}
 };
 let active=false;
+const delBtn=j=>`<button class="ghost del" style="margin-left:auto" onclick="delJob(${j.id},this)">🗑 Sil</button>`;
+async function delJob(id,btn){
+  const job=btn.closest('.job'), name=job.querySelector('b').textContent;
+  if(!confirm(`"${name}" silinsin mi?\n\nFilm dosyası sunucudan kalıcı olarak silinir. Fotoğraf ve videolarına dokunulmaz.`))return;
+  try{await api('/api/jobs/'+id,{method:'DELETE'});loadJobs()}catch(e){alert('Silinemedi: '+e.message)}
+}
 async function loadJobs(){
-  const js=await api('/api/jobs'); active=js.some(j=>['sırada','çalışıyor'].includes(j.status)); if(!js.length)return;
+  const js=await api('/api/jobs'); active=js.some(j=>['sırada','çalışıyor'].includes(j.status)); if(!js.length){$('#jobs').innerHTML='<span class="muted">Henüz film yok.</span>';return}
   $('#jobs').innerHTML=js.map(j=>`<div class="job"><div class="row"><b style="flex:1">${j.title}</b><span class="st ${j.status}">${j.status}</span>
     ${['sırada','çalışıyor'].includes(j.status)?`<button class="ghost" onclick="post('/api/jobs/${j.id}/cancel',{}).then(loadJobs)">İptal</button>`:''}</div>
     ${j.status=='çalışıyor'||j.status=='sırada'?`<div class="bar"><i style="width:${j.progress}%"></i></div>`:''}
     <div class="muted">${j.message||''} · ${j.created_at}${j.size_mb?` · ${j.size_mb} MB · ${j.file}`:''}</div>
-    ${j.status=='bitti'&&j.file?`<div class="row"><button class="ghost" onclick="this.outerHTML='<video controls src=/api/jobs/${j.id}/file></video>'">▶ İzle</button><a href="/api/jobs/${j.id}/file?download=1">⬇ İndir</a></div>`:''}</div>`).join('');
+    ${j.status=='bitti'&&j.file?`<div class="row"><button class="ghost" onclick="this.outerHTML='<video controls src=/api/jobs/${j.id}/file></video>'">▶ İzle</button><a href="/api/jobs/${j.id}/file?download=1">⬇ İndir</a>${delBtn(j)}</div>`:(['sırada','çalışıyor'].includes(j.status)?'':`<div class="row">${delBtn(j)}</div>`)}</div>`).join('');
 }
 refreshStatus();loadArchive();loadJobs();
 setInterval(refreshStatus,3000);setInterval(()=>{if(active)loadJobs()},3000);
