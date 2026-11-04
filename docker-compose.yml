@@ -1,0 +1,20 @@
+services:
+  dedplay-film:
+    build: .
+    image: berzahbey/dedplay-film:latest
+    container_name: dedplay-film
+    ports:
+      - "8090:8000"
+    environment:
+      - TZ=Europe/Amsterdam
+      - MUSIC_DEFAULT=muzaffer muzik
+    volumes:
+      # Orijinaller salt okunur (:ro) — uygulama asla değiştiremez/silemez
+      - /DATA/Media/Photos:/media/photos:ro
+      - /DATA/Media/video:/media/videos:ro
+      - /DATA/Media/Music/music:/media/music:ro
+      # Bitmiş filmler buraya yazılır
+      - "/DATA/Media/Movies/Dedplay Film:/output"
+      # Veritabanı, küçük resimler, geçici render dosyaları
+      - /DATA/AppData/dedplay-film:/app/data
+    restart: unless-stopped
