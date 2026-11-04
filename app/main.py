@@ -5,7 +5,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 
-from . import db, planner, render, scanner
+from . import db, planner, render, scanner, styles
 from .analyze import load_image
 from .config import MEDIA_DIRS, MUSIC_DEFAULT, MUSIC_DIR, MUSIC_EXT, THUMB_DIR
 
@@ -26,8 +26,10 @@ def index():
 def status():
     with db.db() as con:
         r = con.execute("SELECT COUNT(*) n, SUM(kind='photo') p, SUM(kind='video') v, "
-                        "SUM(analyzed=0 AND kind='photo') pend FROM media").fetchone()
-    return {"scan": scanner.state, "total": r["n"] or 0, "photos": r["p"] or 0,
+                        "SUM(analyzed=0) pend FROM media").fetchone()
+    with db.db() as con:
+        dups = con.execute("SELECT COUNT(*) FROM media WHERE dup_of IS NOT NULL").fetchone()[0]
+    return {"scan": scanner.state, "duplicates": dups, "total": r["n"] or 0, "photos": r["p"] or 0,
             "videos": r["v"] or 0, "pending_analysis": r["pend"] or 0}
 
 
@@ -120,12 +122,20 @@ class PlanReq(BaseModel):
     photo_sec: float = 3.5
     video_sec: float = 7
     title: str | None = None
+    style: str = "sinematik"
 
 
 @app.post("/api/plan")
 def plan(req: PlanReq):
-    return planner.plan(req.start, req.end, req.folder, req.target_minutes or None,
-                        req.photo_sec, req.video_sec, req.title)
+    out = planner.plan(req.start, req.end, req.folder, req.target_minutes or None,
+                       req.photo_sec, req.video_sec, req.title, req.style)
+    out["scan_running"] = scanner.state["running"]
+    return out
+
+
+@app.get("/api/styles")
+def get_styles():
+    return {k: {"label": v["label"], "photo_sec": v["photo_sec"]} for k, v in styles.STYLES.items()}
 
 
 # ---------- Müzik ----------
@@ -175,6 +185,9 @@ class RenderReq(BaseModel):
     chapter_titles: bool = True
     photo_sec: float = 3.5
     video_sec: float = 7
+    style: str = "sinematik"
+    letterbox: bool = False
+    beat_sync: bool = True
 
 
 @app.post("/api/render")

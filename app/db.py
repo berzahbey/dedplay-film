@@ -19,8 +19,10 @@ CREATE TABLE IF NOT EXISTS media (
     width INTEGER, height INTEGER,
     duration REAL,
     sharp REAL,                  -- netlik puanı (yüksek = net)
-    dhash TEXT,                  -- benzer kare tespiti
-    analyzed INTEGER DEFAULT 0
+    dhash TEXT,                  -- görsel iz (foto: 256 bit, video: 3 kare)
+    analyzed INTEGER DEFAULT 0,
+    highlights TEXT,             -- uzun videolar için en iyi an analizi (JSON)
+    dup_of INTEGER               -- başka bir dosyanın kopyasıysa asıl dosyanın id'si
 );
 CREATE INDEX IF NOT EXISTS idx_media_taken ON media(taken_at);
 CREATE INDEX IF NOT EXISTS idx_media_folder ON media(folder);
@@ -54,6 +56,15 @@ def db():
 def init():
     with db() as con:
         con.executescript(SCHEMA)
+        cols = {r["name"] for r in con.execute("PRAGMA table_info(media)")}
+        for name, typ in (("sharp", "REAL"), ("dhash", "TEXT"), ("analyzed", "INTEGER DEFAULT 0"),
+                          ("dup_of", "INTEGER"), ("highlights", "TEXT")):
+            if name not in cols:
+                con.execute(f"ALTER TABLE media ADD COLUMN {name} {typ}")
+        # Eski sürümün 64 bitlik izleri ve analiz edilmemiş videolar yeniden analiz edilir
+        con.execute("UPDATE media SET analyzed=0 WHERE kind='photo' AND length(dhash)=16")
+        con.execute("UPDATE media SET analyzed=0 WHERE kind='video' AND dhash IS NULL AND analyzed=1")
+        con.execute("CREATE INDEX IF NOT EXISTS idx_media_dup ON media(dup_of)")
         # Yarım kalmış işleri kapat (container yeniden başlarsa)
         con.execute("UPDATE jobs SET status='hata', message='Sunucu yeniden başladı' "
                     "WHERE status IN ('sırada','çalışıyor')")

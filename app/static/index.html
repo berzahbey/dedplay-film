@@ -76,6 +76,14 @@ a{color:var(--ac)}
   <div id="t-folder" class="hide row">
     <label class="f" style="min-width:320px">Klasör<select id="folderSel"></select></label>
   </div>
+  <div style="margin-top:18px">
+    <div class="muted" style="margin-bottom:6px">Stil</div>
+    <div class="chips" id="styleSel">
+      <button class="chip" data-s="sade" data-p="3.5"><b>Sade</b><small>Yumuşak geçişler, doğal renkler</small></button>
+      <button class="chip on" data-s="sinematik" data-p="4"><b>Sinematik</b><small>Film tonu, kenar karartma, ağır tempo</small></button>
+      <button class="chip" data-s="enerjik" data-p="2.5"><b>Enerjik</b><small>Canlı renkler, hızlı ritim, hareketli geçişler</small></button>
+    </div>
+  </div>
   <div class="row" style="margin-top:18px;align-items:flex-end">
     <label class="f" style="flex:1;min-width:240px">Film adı<input id="title" placeholder="ör. 2025 – Yılımız"></label>
     <label class="f">Film süresi
@@ -83,7 +91,7 @@ a{color:var(--ac)}
         <button data-m="5">5 dk</button><button data-m="10">10 dk</button><button data-m="15" class="on">15 dk</button><button data-m="20">20 dk</button><button data-m="30">30 dk</button><button data-m="0">Hepsi</button>
       </div>
     </label>
-    <label class="f">Fotoğraf (sn)<input type="number" id="photoSec" value="3.5" min="2" max="8" step="0.5" style="width:80px"></label>
+    <label class="f">Fotoğraf (sn)<input type="number" id="photoSec" value="4" min="2" max="8" step="0.5" style="width:80px"></label>
     <label class="f">Video kesiti (sn)<input type="number" id="videoSec" value="7" min="3" max="30" step="1" style="width:80px"></label>
     <button class="btn" id="planBtn">Kareleri seç</button>
   </div>
@@ -108,6 +116,8 @@ a{color:var(--ac)}
     <label class="f">Müzik sesi <input type="range" id="mVol" min="0.2" max="1.2" step="0.05" value="0.8"></label>
     <label class="row"><input type="checkbox" id="vAudio" checked> Videoların kendi sesi (konuşurken müzik kısılır)</label>
     <label class="row"><input type="checkbox" id="chTitles" checked> Bölüm başlıkları</label>
+    <label class="row"><input type="checkbox" id="beatSync" checked> Kareleri müziğin ritmine göre değiştir</label>
+    <label class="row"><input type="checkbox" id="letterbox"> Sinema bantları (üst-alt siyah şerit)</label>
   </div>
   <div class="row" style="margin-top:18px">
     <button class="btn" id="renderBtn">🎬 Filmi oluştur</button>
@@ -125,7 +135,7 @@ a{color:var(--ac)}
 const $=s=>document.querySelector(s), api=(u,o)=>fetch(u,o).then(r=>{if(!r.ok)return r.json().then(e=>{throw new Error(e.detail||r.status)});return r.json()});
 const post=(u,b)=>api(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});
 const AY=["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
-let src='year', sel={}, folders=[], minutes=15, PLAN=null, off=new Set(), music=new Set();
+let style='sinematik', src='year', sel={}, folders=[], minutes=15, PLAN=null, off=new Set(), music=new Set();
 const fmt=n=>n.toLocaleString('tr-TR');
 const mmss=s=>{s=Math.round(s);const m=Math.floor(s/60);return m?`${m} dk ${String(s%60).padStart(2,'0')} sn`:`${s} sn`};
 
@@ -135,6 +145,8 @@ async function refreshStatus(){
   let t=`${fmt(s.photos)} fotoğraf · ${fmt(s.videos)} video`;
   if(sc.running){const pct=sc.todo?Math.round(sc.done/sc.todo*100):0;t=`⏳ ${sc.phase}… ${sc.todo?pct+'%':fmt(sc.found)+' dosya'}`}
   else if(s.pending_analysis) t+=` · ${fmt(s.pending_analysis)} analiz bekliyor`;
+  if(s.duplicates) t+=` · ${fmt(s.duplicates)} kopya ayıklandı`;
+  if(sc.running){refreshStatus.n=(refreshStatus.n||0)+1; if(refreshStatus.n%7==0) loadArchive()}
   if(sc.error) t+=' · Hata: '+sc.error;
   $('#arch').textContent=t; $('#scanBtn').disabled=sc.running;
   if(!sc.running && refreshStatus.wasRunning) loadArchive();
@@ -157,13 +169,16 @@ $('#folderSel').onchange=e=>{const f=folders[e.target.value];if(f){sel={start:f.
 $('#srcTabs').onclick=e=>{const t=e.target.dataset.t;if(!t)return;src=t;sel={};
   document.querySelectorAll('#srcTabs button').forEach(b=>b.classList.toggle('on',b.dataset.t==t));
   ['year','range','folder'].forEach(x=>$('#t-'+x).classList.toggle('hide',x!=t))};
+$('#styleSel').onclick=e=>{const c=e.target.closest('.chip');if(!c)return;style=c.dataset.s;$('#photoSec').value=c.dataset.p;
+  document.querySelectorAll('#styleSel .chip').forEach(x=>x.classList.toggle('on',x===c));updInfo()};
 $('#durSeg').onclick=e=>{const m=e.target.dataset.m;if(m===undefined)return;minutes=+m;
   document.querySelectorAll('#durSeg button').forEach(b=>b.classList.toggle('on',b===e.target))};
 
 // --- plan
 function segDur(it){const vs=+$('#videoSec').value,d=it.duration||0;
   if(it.kind=='photo')return +$('#photoSec').value; if(d<=vs+1.5)return Math.max(d,1); return d>60?2*vs:vs}
-function estimate(){if(!PLAN)return 0;let s=8;for(const c of PLAN.chapters){const its=c.items.filter(i=>!off.has(i.id));if(its.length)s+=($('#chTitles').checked?3:0)+its.reduce((a,i)=>a+segDur(i),0)}return s}
+const TR={sade:.5,sinematik:.8,enerjik:.35};
+function estimate(){if(!PLAN)return 0;let s=8;for(const c of PLAN.chapters){const its=c.items.filter(i=>!off.has(i.id)&&i.role!='cutaway');if(its.length)s+=($('#chTitles').checked?3:0)+its.reduce((a,i)=>a+segDur(i)*(i.role=='pair'?.65:1)-TR[style],0)}return s}
 function updInfo(){const n=PLAN?PLAN.chapters.reduce((a,c)=>a+c.items.length,0)-off.size:0;
   $('#renderInfo').textContent=PLAN?`${fmt(n)} kare · tahmini film süresi ${mmss(estimate())}`:''}
 
@@ -171,7 +186,7 @@ $('#planBtn').onclick=async()=>{
   if(!sel.start){alert('Önce bir yıl, tarih aralığı veya klasör seç.');return}
   $('#planBtn').disabled=true;$('#planBtn').textContent='Seçiliyor…';
   try{
-    PLAN=await post('/api/plan',{...sel,target_minutes:minutes,photo_sec:+$('#photoSec').value,video_sec:+$('#videoSec').value,title:$('#title').value||null});
+    PLAN=await post('/api/plan',{...sel,target_minutes:minutes,photo_sec:+$('#photoSec').value,video_sec:+$('#videoSec').value,title:$('#title').value||null,style});
     off=new Set(); if(!$('#title').value)$('#title').value=PLAN.title; drawPlan();
   }catch(e){alert('Hata: '+e.message)}
   $('#planBtn').disabled=false;$('#planBtn').textContent='Kareleri seç';
@@ -179,9 +194,9 @@ $('#planBtn').onclick=async()=>{
 function drawPlan(){
   const s=PLAN.stats; $('#prevCard').classList.remove('hide');$('#musicCard').classList.remove('hide');
   if(!PLAN.chapters.length){$('#stats').innerHTML='Bu aralıkta kare bulunamadı.';$('#chapters').innerHTML='';return}
-  $('#stats').innerHTML=`<b>${fmt(s.total)}</b> dosya bulundu · <b>${fmt(s.chosen)}</b> kare seçildi · ${fmt(s.duplicates)} benzer kare, ${fmt(s.blurry)} bulanık, ${fmt(s.filtered)} ekran görüntüsü/Live Photo elendi · ${PLAN.mode=='day'?'günlere':'aylara'} göre bölümlendi`;
+  $('#stats').innerHTML=`<b>${fmt(s.total)}</b> dosya bulundu · <b>${fmt(s.chosen)}</b> kare seçildi · ${fmt(s.duplicates)} benzer kare, ${fmt(s.blurry)} bulanık, ${fmt(s.filtered)} ekran görüntüsü/Live Photo elendi · ${PLAN.mode=='day'?'günlere':'aylara'} göre bölümlendi${s.cutaways?` · <b>${s.cutaways}</b> fotoğraf videolara ara plan oldu`:''}${s.pairs?` · ${s.pairs} ikili kare`:''}${PLAN.scan_running?'<br>⏳ Tarama sürüyor: şu ana kadar taranan dosyalarla seçildi. Tarama bitince tekrar "Kareleri seç"e basarsan yeni dosyalar da eklenir.':''}`;
   $('#chapters').innerHTML=PLAN.chapters.map((c,ci)=>`<div class="chap"><h3>${c.title} <small>${c.subtitle} · ${c.items.length} kare</small></h3><div class="grid">${
-    c.items.map(i=>`<div class="th" data-id="${i.id}" title="${i.name}\n${i.taken_at}"><img loading="lazy" src="/api/thumb/${i.id}">${i.kind=='video'?`<span class="b">▶ ${Math.round(i.duration||0)} sn</span>`:''}</div>`).join('')}</div></div>`).join('');
+    c.items.map(i=>`<div class="th" data-id="${i.id}" title="${i.name}\n${i.taken_at}"><img loading="lazy" src="/api/thumb/${i.id}">${i.kind=='video'?`<span class="b">▶ ${Math.round(i.duration||0)} sn</span>`:''}${i.role=='cutaway'?'<span class="b" style="left:5px;right:auto">↳ ara plan</span>':''}${i.role=='pair'?'<span class="b" style="left:5px;right:auto">⧉ ikili</span>':''}</div>`).join('')}</div></div>`).join('');
   document.querySelectorAll('.th').forEach(t=>t.onclick=()=>{const id=+t.dataset.id;off.has(id)?off.delete(id):off.add(id);t.classList.toggle('off');updInfo()});
   updInfo(); if(!$('#musicDir').options.length)loadMusic();
 }
@@ -207,7 +222,8 @@ $('#renderBtn').onclick=async()=>{
   const chapters=PLAN.chapters.map(c=>({title:c.title,subtitle:c.subtitle,ids:c.items.filter(i=>!off.has(i.id)).map(i=>i.id)})).filter(c=>c.ids.length);
   try{await post('/api/render',{title:$('#title').value||PLAN.title,range_text:PLAN.range_text,chapters,music:[...music],
     music_volume:+$('#mVol').value,video_audio:$('#vAudio').checked,chapter_titles:$('#chTitles').checked,
-    photo_sec:+$('#photoSec').value,video_sec:+$('#videoSec').value});
+    photo_sec:+$('#photoSec').value,video_sec:+$('#videoSec').value,style,
+    beat_sync:$('#beatSync').checked,letterbox:$('#letterbox').checked});
     loadJobs(); $('#jobs').scrollIntoView({behavior:'smooth'});
   }catch(e){alert('Hata: '+e.message)}
 };

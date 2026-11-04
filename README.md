@@ -5,17 +5,21 @@ Fotoğraf ve video arşivini, uğraşmadan kaliteli bir filme çeviren ev sunucu
 
 ## Ne yapar?
 
-1. **Arşivi tarar.** Fotoğraf ve video klasörlerindeki her dosyanın çekim tarihini (EXIF, Google Takeout .json, dosya adı) ve konumunu okur, sonra her fotoğrafın netliğini ölçer.
-2. **En iyi kareleri seçer.** Art arda çekilmiş benzer kareleri, bulanık fotoğrafları, ekran görüntülerini ve iPhone Live Photo videolarını eler. Seçilen süreye göre zaman çizgisinden dengeli seçim yapar.
-3. **Bölümler.** Kısa aralıkları günlere ("1. Gün · 12 Temmuz 2025, Cumartesi"), uzun aralıkları aylara ayırır.
-4. **Kurgular:**
-   - Fotoğraflara Ken Burns hareketi (yavaş zoom ve kaydırma) verir.
-   - Dikey fotoğraf ve videoların arka planını bulanık doldurur.
-   - Uzun videolardan kesit alır.
-   - iPhone HDR videolarının renklerini düzeltir.
-   - Açılış, bölüm ve kapanış başlıkları ekler.
-5. **Ses:** Müzik sırayla ve geçişli çalar. Videoda konuşma olduğunda müzik otomatik kısılır. Videoların sesi eşitlenir ve uğultu filtrelenir.
-6. **Çıktı:** 1080p MP4 dosyası, `/DATA/Media/Movies/Dedplay Film` klasörüne yazılır.
+1. **Arşivi tarar.** Her dosyanın çekim tarihini (EXIF, Google Takeout .json, dosya adı) ve konumunu okur, sonra netliğini ve görsel izini çıkarır. En yeni dosyalardan başlar. Tarama sürerken film yapılabilir.
+2. **Kopyaları ayıklar.** Adı, boyutu ya da sıkıştırması farklı olsa da görüntüsü aynı olan fotoğraf ve videolar (WhatsApp kopyaları, Google Fotoğraflar yedekleri, yeniden kaydedilmiş videolar) filme bir kez girer. Her grupta en iyi kopya kalır: gerçek çekim tarihi olan ve en yüksek çözünürlüklü olan.
+3. **En iyi kareleri seçer.** Art arda çekilmiş benzer kareleri, bulanık fotoğrafları, ekran görüntülerini ve Live Photo videolarını eler. Seçilen süreye göre dönem boyunca dengeli seçim yapar.
+4. **Uzun videolarda en iyi anları bulur.** Ses canlılığı (konuşma, gülüşme), hareket, netlik ve aydınlığa bakar. Video boyunca birbirinden uzak 1-6 kesit seçer ve kesme noktalarını sessiz anlara kaydırır.
+5. **Sahne kurgusu yapar.** Bir video çekilirken ya da hemen öncesinde/sonrasında aynı rotada çekilen fotoğraflar o videoya "ara plan" olur: video oynarken ekrana gelir, videonun sesi kesilmez. Art arda çekilmiş iki dikey fotoğraf yan yana tek karede gösterilir.
+6. **Efektler:**
+   - Ken Burns hareketi
+   - Geçiş efektleri
+   - Müziğin ritmine göre kesme
+   - Renk stilleri: Sade, Sinematik, Enerjik
+   - İsteğe bağlı sinema bantları
+   - iPhone HDR renk düzeltmesi
+   - Açılış, bölüm ve kapanış başlıkları
+7. **Ses:** Müzik sırayla ve geçişli çalar. Videoda konuşma olduğunda müzik otomatik kısılır. Videoların sesi eşitlenir ve uğultu filtrelenir.
+8. **Çıktı:** 1080p MP4 dosyası, `/DATA/Media/Movies/Dedplay Film` klasörüne yazılır.
 
 Tamamen ücretsiz, açık kaynak araçlarla (FFmpeg, ExifTool, Pillow) çalışır. Dışarıya hiçbir veri gönderilmez.
 
@@ -56,6 +60,5 @@ cd /DATA/AppData/dedplay-film-src && git pull && docker compose up -d --build
 
 ## Yol haritası
 
-- v2: Video titreme giderme (vidstab), yapay zekâ ile rüzgar ve gürültü temizliği (DeepFilterNet), cihaz saat düzeltme
-- v3: Müzik ritmine göre kurgu, yüz tanıyarak kırpma, GPS'ten yer adları
+- v3: Video titreme giderme (vidstab), yapay zekâ ile rüzgar ve gürültü temizliği (DeepFilterNet), cihaz saat düzeltme, yüz tanıyarak kırpma, GPS'ten yer adları
 - v4: Yerel yapay zekâ ile başlık ve hikâye, seslendirme, dikey Reels özeti

@@ -7,6 +7,8 @@ from datetime import datetime, date
 
 from . import db
 from .analyze import hamming
+from .dedupe import find_duplicates
+from . import story, styles
 
 AYLAR = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos",
          "Eylül", "Ekim", "Kasım", "Aralık"]
@@ -34,23 +36,17 @@ def tr_range(a, b):
 
 
 def _segments(item, video_sec):
-    """Bir videodan alınacak (başlangıç, süre) kesitleri."""
-    dur = item.get("duration") or 0
-    if dur <= video_sec + 1.5:
-        return [(0.0, max(dur, 1.0))]
-    if dur > 60:
-        return [(dur * 0.15, video_sec), (dur * 0.6, video_sec)]
-    return [(min(dur * 0.2, dur - video_sec), video_sec)]
+    return story.segments(item.get("duration"), video_sec)
 
 
-def cost(item, photo_sec, video_sec):
+def cost(item, photo_sec, video_sec, trans=0.0):
     if item["kind"] == "photo":
-        return photo_sec
-    return sum(d for _, d in _segments(item, video_sec))
+        return max(photo_sec - trans, 1.0)
+    return sum(max(d - trans, 0.8) for _, d in _segments(item, video_sec))
 
 
 def _load(start, end, folder):
-    q = "SELECT * FROM media WHERE taken_at BETWEEN ? AND ?"
+    q = "SELECT * FROM media WHERE dup_of IS NULL AND taken_at BETWEEN ? AND ?"
     args = [f"{start} 00:00:00", f"{end} 23:59:59"]
     if folder:
         q += " AND (folder = ? OR folder LIKE ?)"
@@ -93,7 +89,7 @@ def _dedupe(rows, stats):
             continue
         if last is not None:
             dt = (datetime.fromisoformat(r["taken_at"]) - datetime.fromisoformat(last["taken_at"])).total_seconds()
-            if dt <= 2 or (dt <= 120 and hamming(r["dhash"], last["dhash"]) <= 8):
+            if dt <= 2 or (dt <= 120 and hamming(r["dhash"], last["dhash"]) <= 40):
                 stats["duplicates"] += 1
                 if (r["sharp"] or 0) > (last["sharp"] or 0):
                     out[li] = r
@@ -130,13 +126,13 @@ def _score(r):
     return s
 
 
-def _pick(items, budget, photo_sec, video_sec):
-    total = sum(cost(i, photo_sec, video_sec) for i in items)
+def _pick(items, budget, photo_sec, video_sec, trans):
+    total = sum(cost(i, photo_sec, video_sec, trans) for i in items)
     if total <= budget:
         return items
     avg = total / len(items)
     k = max(1, int(budget / avg))
-    # Zaman çizgisini k parçaya böl, her parçadan en iyisini al → yıl boyunca dengeli dağılım
+    # Zaman çizgisini k parçaya böl, her parçadan en iyisini al → dönem boyunca dengeli dağılım
     chosen = []
     n = len(items)
     for b in range(k):
@@ -146,13 +142,32 @@ def _pick(items, budget, photo_sec, video_sec):
     return chosen
 
 
-def plan(start, end, folder=None, target_minutes=15, photo_sec=3.5, video_sec=7.0, title=None):
+def _count_global_dups(start, end, folder):
+    q = "SELECT COUNT(*) FROM media WHERE dup_of IS NOT NULL AND taken_at BETWEEN ? AND ?"
+    args = [f"{start} 00:00:00", f"{end} 23:59:59"]
+    if folder:
+        q += " AND (folder = ? OR folder LIKE ?)"
+        args += [folder, folder.rstrip("/") + "/%"]
+    with db.db() as con:
+        return con.execute(q, args).fetchone()[0]
+
+
+def plan(start, end, folder=None, target_minutes=15, photo_sec=3.5, video_sec=7.0, title=None,
+         style="sinematik"):
+    st = styles.get(style)
+    trans = st["transition"]
     d0, d1 = date.fromisoformat(start), date.fromisoformat(end)
-    stats = {"total": 0, "duplicates": 0, "blurry": 0, "filtered": 0, "chosen": 0}
+    stats = {"total": 0, "duplicates": 0, "blurry": 0, "filtered": 0, "chosen": 0,
+             "cutaways": 0, "pairs": 0}
     rows = _load(start, end, folder)
-    stats["total"] = len(rows)
+    gdups = _count_global_dups(start, end, folder)
+    stats["total"] = len(rows) + gdups
     rows = _filter(rows)
-    stats["filtered"] = stats["total"] - len(rows)
+    stats["filtered"] = stats["total"] - gdups - len(rows)
+    # Farklı adlı aynı kareler (tarama henüz arşiv geneli kopya taramasını bitirmemiş olabilir)
+    local = find_duplicates(rows)
+    rows = [r for r in rows if r["id"] not in local]
+    stats["duplicates"] = gdups + len(local)
     rows = _dedupe(rows, stats)
     rows = _deblur(rows, stats)
     if not rows:
@@ -171,7 +186,7 @@ def plan(start, end, folder=None, target_minutes=15, photo_sec=3.5, video_sec=7.
     if target_minutes:
         budget = target_minutes * 60 - INTRO_SEC - OUTRO_SEC - TITLE_SEC * len(groups)
         budget = max(budget, 30)
-        costs = {k: sum(cost(i, photo_sec, video_sec) for i in v) for k, v in groups.items()}
+        costs = {k: sum(cost(i, photo_sec, video_sec, trans) for i in v) for k, v in groups.items()}
         # Kalabalık günler/aylar daha çok yer alır ama sakin dönemler de kaybolmaz (karekök)
         alloc = {k: 0.0 for k in groups}
         remaining, open_keys = budget, set(groups)
@@ -192,7 +207,7 @@ def plan(start, end, folder=None, target_minutes=15, photo_sec=3.5, video_sec=7.
             if remaining <= 1 or not open_keys:
                 break
         for k in groups:
-            groups[k] = _pick(groups[k], alloc[k], photo_sec, video_sec)
+            groups[k] = _pick(groups[k], alloc[k], photo_sec, video_sec, trans)
 
     chapters, dur = [], INTRO_SEC + OUTRO_SEC
     for k, items in groups.items():
@@ -204,16 +219,30 @@ def plan(start, end, folder=None, target_minutes=15, photo_sec=3.5, video_sec=7.
         else:
             y, m = map(int, k.split("-"))
             ttl, sub = AYLAR[m - 1], str(y)
-        c = sum(cost(i, photo_sec, video_sec) for i in items)
+        units = story.build_units(items, video_sec)
+        role = {}
+        for u in units:
+            if u["type"] == "pair":
+                stats["pairs"] += 1
+                for i in u["ids"]:
+                    role[i] = "pair"
+            elif u["type"] == "video":
+                for sg in u["segments"]:
+                    for c in sg["cuts"]:
+                        role[c] = "cutaway"
+                        stats["cutaways"] += 1
+        c = sum(story.unit_cost(u, photo_sec, None) - trans * max(1, len(u.get("segments", [1])))
+                for u in units)
         dur += c + TITLE_SEC
-        chapters.append({"key": k, "title": ttl, "subtitle": sub, "items": [_public(i) for i in items]})
+        chapters.append({"key": k, "title": ttl, "subtitle": sub,
+                         "items": [_public(i, role.get(i["id"])) for i in items]})
         stats["chosen"] += len(items)
 
     return {"mode": mode, "chapters": chapters, "stats": stats, "duration": round(dur),
-            "title": title or f"Dedplay Film · {tr_range(d0, d1)}",
+            "title": title or f"Dedplay Film · {tr_range(d0, d1)}", "style": style,
             "range_text": tr_range(d0, d1) if tr_range(d0, d1).isdigit() else tr_range(first, last)}
 
 
-def _public(r):
+def _public(r, role=None):
     return {"id": r["id"], "kind": r["kind"], "taken_at": r["taken_at"], "duration": r["duration"],
-            "name": os.path.basename(r["path"])}
+            "name": os.path.basename(r["path"]), "role": role}

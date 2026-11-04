@@ -6,12 +6,16 @@ import subprocess
 import tempfile
 import threading
 import time
+import traceback
+from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime
 
 from . import db
+from .analyze import analyze_item
 from .config import MEDIA_DIRS, PHOTO_EXT, VIDEO_EXT, SKIP_DIRS
 
-state = {"running": False, "phase": "", "found": 0, "done": 0, "new": 0, "removed": 0,
+state = {"running": False, "phase": "", "found": 0, "done": 0, "todo": 0, "new": 0, "removed": 0,
+         "analyzed": 0, "duplicates": 0,
          "started": None, "finished": None, "error": None}
 _thread = None
 
@@ -153,9 +157,35 @@ def _walk():
                     yield p
 
 
+def dedupe_all():
+    """Arşiv genelinde kopya gruplarını yeniden hesaplar ve dup_of alanını günceller."""
+    from .dedupe import find_duplicates
+    with db.db() as con:
+        rows = [dict(r) for r in con.execute(
+            "SELECT id,kind,dhash,date_source,width,height,duration,sharp FROM media WHERE dhash IS NOT NULL")]
+    dups = find_duplicates(rows)
+    with db.db() as con:
+        con.execute("UPDATE media SET dup_of=NULL WHERE dup_of IS NOT NULL")
+        con.executemany("UPDATE media SET dup_of=? WHERE id=?", [(v, k) for k, v in dups.items()])
+    state["duplicates"] = len(dups)
+    return len(dups)
+
+
+def _analyze_ids(pool, items):
+    """items: [(id, kind, path, duration)] → netlik/iz hesaplanır, veritabanına yazılır."""
+    if not items:
+        return
+    res = list(pool.map(analyze_item, items, chunksize=8))
+    with db.db() as con:
+        con.executemany("UPDATE media SET sharp=?,dhash=?,analyzed=1 WHERE id=?",
+                        [(s, h, mid) for mid, s, h in res])
+    state["analyzed"] += len(res)
+
+
 def _scan():
-    state.update(running=True, phase="Dosyalar listeleniyor", found=0, done=0, new=0, removed=0,
-                 started=time.time(), finished=None, error=None)
+    state.update(running=True, phase="Dosyalar listeleniyor", found=0, done=0, todo=0, new=0,
+                 removed=0, analyzed=0, started=time.time(), finished=None, error=None)
+    workers = int(os.environ.get("ANALYZE_WORKERS", max(1, (os.cpu_count() or 2) // 2)))
     try:
         with db.db() as con:
             known = {r["path"]: (r["size"], r["mtime"]) for r in con.execute("SELECT path,size,mtime FROM media")}
@@ -169,57 +199,55 @@ def _scan():
                 continue
             if known.get(p) != (st.st_size, st.st_mtime):
                 todo.append((p, st))
-        state["phase"] = "Tarih ve konum okunuyor"
-        state["todo"] = len(todo)
-        B = 300
-        for i in range(0, len(todo), B):
-            chunk = todo[i:i + B]
-            metas = _exiftool([p for p, _ in chunk])
-            rows = [_build_row(p, st, metas.get(p, {})) for p, st in chunk]
-            with db.db() as con:
-                con.executemany(
-                    "INSERT INTO media(path,folder,kind,size,mtime,taken_at,date_source,lat,lon,width,height,duration) "
-                    "VALUES(?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(path) DO UPDATE SET "
-                    "size=excluded.size,mtime=excluded.mtime,taken_at=excluded.taken_at,"
-                    "analyzed=0,date_source=excluded.date_source,lat=excluded.lat,lon=excluded.lon,"
-                    "width=excluded.width,height=excluded.height,duration=excluded.duration", rows)
-            state["done"] += len(chunk)
-            state["new"] += len(chunk)
         gone = [p for p in known if p not in seen]
         if gone:
             with db.db() as con:
                 con.executemany("DELETE FROM media WHERE path=?", [(p,) for p in gone])
         state["removed"] = len(gone)
-        _analyze()
+
+        # En yeni dosyalar önce: son yıllar hemen kullanılabilir olur
+        todo.sort(key=lambda t: t[1].st_mtime, reverse=True)
+        state["todo"] = len(todo)
+        state["phase"] = "Taranıyor (bu sırada film yapabilirsin)"
+        B = 200
+        with ProcessPoolExecutor(max_workers=workers) as pool:
+            for n, i in enumerate(range(0, len(todo), B)):
+                chunk = todo[i:i + B]
+                metas = _exiftool([p for p, _ in chunk])
+                rows = [_build_row(p, st, metas.get(p, {})) for p, st in chunk]
+                with db.db() as con:
+                    con.executemany(
+                        "INSERT INTO media(path,folder,kind,size,mtime,taken_at,date_source,lat,lon,width,height,duration) "
+                        "VALUES(?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(path) DO UPDATE SET "
+                        "size=excluded.size,mtime=excluded.mtime,taken_at=excluded.taken_at,"
+                        "analyzed=0,date_source=excluded.date_source,lat=excluded.lat,lon=excluded.lon,"
+                        "width=excluded.width,height=excluded.height,duration=excluded.duration", rows)
+                    items = [(r["id"], r["kind"], r["path"], r["duration"]) for r in con.execute(
+                        f"SELECT id,kind,path,duration FROM media WHERE path IN ({','.join('?' * len(chunk))})",
+                        [p for p, _ in chunk])]
+                _analyze_ids(pool, items)
+                state["done"] += len(chunk)
+                state["new"] += len(chunk)
+                if n % 10 == 9:
+                    dedupe_all()
+            # Önceki taramalardan analiz edilmemiş kalanlar
+            with db.db() as con:
+                rest = [(r["id"], r["kind"], r["path"], r["duration"]) for r in
+                        con.execute("SELECT id,kind,path,duration FROM media WHERE analyzed=0")]
+            if rest:
+                state["phase"] = "Kalan dosyalar analiz ediliyor"
+                for i in range(0, len(rest), B):
+                    _analyze_ids(pool, rest[i:i + B])
+        state["phase"] = "Kopyalar ayıklanıyor"
+        dedupe_all()
         state["phase"] = "Tamamlandı"
     except Exception as e:  # pragma: no cover
+        traceback.print_exc()
         state["error"] = str(e)
         state["phase"] = "Hata"
     finally:
         state["running"] = False
         state["finished"] = time.time()
-
-
-def _analyze():
-    """Fotoğraflar için netlik ve benzerlik izi hesaplar (bir kez, sonra önbellekte)."""
-    from .analyze import photo_metrics
-    with db.db() as con:
-        rows = [(r["id"], r["path"]) for r in
-                con.execute("SELECT id,path FROM media WHERE kind='photo' AND analyzed=0")]
-    state["phase"] = "Görüntü kalitesi analiz ediliyor"
-    state["todo"], state["done"] = len(rows), 0
-    buf = []
-    for mid, path in rows:
-        sharp, dh = photo_metrics(path)
-        buf.append((sharp, dh, mid))
-        state["done"] += 1
-        if len(buf) >= 200:
-            with db.db() as con:
-                con.executemany("UPDATE media SET sharp=?,dhash=?,analyzed=1 WHERE id=?", buf)
-            buf = []
-    if buf:
-        with db.db() as con:
-            con.executemany("UPDATE media SET sharp=?,dhash=?,analyzed=1 WHERE id=?", buf)
 
 
 def start():
