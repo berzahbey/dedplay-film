@@ -592,6 +592,15 @@ def _render(jid, p):
         rows = {r["id"]: dict(r) for r in
                 con.execute(f"SELECT * FROM media WHERE id IN ({','.join('?' * len(ids))})", ids)}
     infos = {}
+    unknown = [r for r in rows.values() if r["kind"] == "video" and r.get("meta_rot") is None]
+    if unknown:
+        _set(jid, message="Video yönleri kontrol ediliyor")
+        for r in unknown:
+            r["meta_rot"], a = orient.check_video(r["path"], r.get("duration") or 0)
+            if r.get("auto_rot") is None:
+                r["auto_rot"] = a
+            with db.db() as con:
+                con.execute("UPDATE media SET meta_rot=?, auto_rot=? WHERE id=?", (r["meta_rot"], r["auto_rot"], r["id"]))
     for i, r in list(rows.items()):  # bozuk/okunamayan dosyaları baştan ayıkla
         rot = orient.effective(r)
         if rot in (90, 270) and r.get("width") and r.get("height"):

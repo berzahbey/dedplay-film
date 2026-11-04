@@ -157,6 +157,13 @@ def _walk():
                     yield p
 
 
+def _orient_item(args):
+    from .orient import check_video
+    mid, path, dur = args
+    b, a = check_video(path, dur)
+    return mid, b, a
+
+
 def dedupe_all():
     """Arşiv genelinde kopya gruplarını yeniden hesaplar ve dup_of alanını günceller."""
     from .dedupe import find_duplicates
@@ -238,6 +245,20 @@ def _scan():
                 state["phase"] = "Kalan dosyalar analiz ediliyor"
                 for i in range(0, len(rest), B):
                     _analyze_ids(pool, rest[i:i + B])
+            # Video yönleri (yan kaydedilmiş videolar) — bir kez yapılır
+            with db.db() as con:
+                vids = [(r["id"], r["path"], r["duration"] or 0) for r in
+                        con.execute("SELECT id,path,duration FROM media WHERE kind='video' AND meta_rot IS NULL")]
+            if vids:
+                state["phase"] = "Video yönleri kontrol ediliyor"
+                state["todo"], state["done"] = len(vids), 0
+                for i in range(0, len(vids), 40):
+                    part = vids[i:i + 40]
+                    res = list(pool.map(_orient_item, part))
+                    with db.db() as con:
+                        con.executemany("UPDATE media SET meta_rot=?, auto_rot=COALESCE(auto_rot, ?) WHERE id=?",
+                                        [(b, a, mid) for mid, b, a in res])
+                    state["done"] += len(part)
         state["phase"] = "Kopyalar ayıklanıyor"
         dedupe_all()
         state["phase"] = "Tamamlandı"

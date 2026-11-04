@@ -85,7 +85,7 @@ def folders():
 @app.get("/api/thumb/{mid}")
 def thumb(mid: int):
     with db.db() as con:
-        r = con.execute("SELECT path, kind, rotate_fix, auto_rot FROM media WHERE id=?", (mid,)).fetchone()
+        r = con.execute("SELECT path, kind, rotate_fix, auto_rot, meta_rot FROM media WHERE id=?", (mid,)).fetchone()
     if not r:
         raise HTTPException(404)
     rot = orient.effective(dict(r))
@@ -107,18 +107,20 @@ def thumb(mid: int):
 
 
 class RotateReq(BaseModel):
-    deg: int
+    step: int = 90
 
 
 @app.post("/api/media/{mid}/rotate")
 def rotate(mid: int, req: RotateReq):
-    """Elle yön düzeltmesi (saat yönünde 0/90/180/270). Orijinal dosyaya dokunulmaz."""
-    deg = req.deg % 360
-    if deg not in (0, 90, 180, 270):
-        raise HTTPException(400, "Geçersiz açı")
+    """Elle yön düzeltmesi: her çağrıda saat yönünde 90° daha. Orijinal dosyaya dokunulmaz."""
     with db.db() as con:
-        con.execute("UPDATE media SET rotate_fix=? WHERE id=?", (deg, mid))
-    return {"rot": deg}
+        r = con.execute("SELECT rotate_fix, auto_rot, meta_rot FROM media WHERE id=?", (mid,)).fetchone()
+        if not r:
+            raise HTTPException(404)
+        cur = r["rotate_fix"] if r["rotate_fix"] is not None else (r["auto_rot"] or 0)
+        new = (int(cur) + req.step) % 360
+        con.execute("UPDATE media SET rotate_fix=? WHERE id=?", (new, mid))
+    return {"rot": orient.effective({"rotate_fix": new, "meta_rot": r["meta_rot"]})}
 
 
 @app.get("/api/media/{mid}")
@@ -145,8 +147,13 @@ class PlanReq(BaseModel):
 
 @app.post("/api/plan")
 def plan(req: PlanReq):
-    out = planner.plan(req.start, req.end, req.folder, req.target_minutes or None,
-                       req.photo_sec, req.video_sec, req.title, req.style)
+    try:
+        out = planner.plan(req.start, req.end, req.folder, req.target_minutes or None,
+                           req.photo_sec, req.video_sec, req.title, req.style)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(500, f"Kare seçimi sırasında hata: {e}")
     out["scan_running"] = scanner.state["running"]
     return out
 

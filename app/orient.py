@@ -24,18 +24,48 @@ def vf_rotate(deg):
 
 
 def effective(row):
+    """Toplam düzeltme = dosya bilgisinden gelen (meta_rot) + elle (yoksa otomatik)."""
+    base = int(row.get("meta_rot") or 0)
     if row.get("rotate_fix") is not None:
-        return int(row["rotate_fix"]) % 360
-    return int(row.get("auto_rot") or 0) % 360
+        return (base + int(row["rotate_fix"])) % 360
+    return (base + int(row.get("auto_rot") or 0)) % 360
 
 
-def _frames(path, dur, n=6):
+def meta_fix(path):
+    """Bazı dosyalarda yön bilgisi FFmpeg'in okumadığı bir yerde durur (oynatıcılar doğru gösterir,
+    FFmpeg yan çözer). ExifTool'un okuduğu yön ile FFmpeg'in uyguladığı yön farklıysa farkı döndürür."""
+    import json as _json
+    try:
+        p = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
+                            "stream_tags=rotate:stream_side_data=rotation", "-of", "json", path],
+                           capture_output=True, timeout=60)
+        st = (_json.loads(p.stdout or b"{}").get("streams") or [{}])[0]
+        r_ff = 0
+        if "rotate" in (st.get("tags") or {}):
+            r_ff = int(float(st["tags"]["rotate"]))
+        for sd in st.get("side_data_list") or []:
+            if "rotation" in sd:
+                r_ff = -int(sd["rotation"])  # FFmpeg: saat yönünün tersi pozitif
+        e = subprocess.run(["exiftool", "-n", "-j", "-Rotation", path], capture_output=True, timeout=60)
+        r_ex = int(float((_json.loads(e.stdout or b"[{}]")[0]).get("Rotation") or 0))
+    except Exception:
+        return 0
+    r_ff, r_ex = r_ff % 360, r_ex % 360
+    if r_ex in (90, 180, 270) and r_ff == 0:
+        return r_ex
+    return 0
+
+
+def _frames(path, dur, n=6, rv=""):
     out = []
     for k in range(n):
         t = dur * (0.1 + 0.8 * k / max(1, n - 1))
-        p = subprocess.run(["ffmpeg", "-v", "error", "-ss", f"{t:.2f}", "-i", path, "-frames:v", "1",
-                            "-vf", "scale=360:360:force_original_aspect_ratio=decrease,format=gray",
+        try:
+            p = subprocess.run(["ffmpeg", "-v", "error", "-ss", f"{t:.2f}", "-i", path, "-frames:v", "1",
+                            "-vf", (rv + "," if rv else "") + "scale=360:360:force_original_aspect_ratio=decrease,format=gray",
                             "-f", "image2pipe", "-vcodec", "pgm", "-"], capture_output=True, timeout=60)
+        except Exception:
+            continue
         if p.stdout and cv2 is not None:
             img = cv2.imdecode(np.frombuffer(p.stdout, np.uint8), cv2.IMREAD_GRAYSCALE)
             if img is not None:
@@ -43,21 +73,31 @@ def _frames(path, dur, n=6):
     return out
 
 
-def detect_video(path, dur):
-    """Dönüş: önerilen saat yönü dönüşü (0 = dokunma)."""
+def check_video(path, dur):
+    """(dosya bilgisinden düzeltme, otomatik düzeltme). Hata olursa (0, 0)."""
+    try:
+        base = meta_fix(path)
+        return base, detect_video(path, dur, base)
+    except Exception:
+        return 0, 0
+
+
+def detect_video(path, dur, base=0):
+    """Dönüş: önerilen ek saat yönü dönüşü (0 = dokunma). Yanlış alarm olmasın diye çok temkinli:
+    düz yönde hiç yüz yokken başka bir yönde en az 2 farklı karede net yüz bulunmalı."""
     if cv2 is None or not dur:
         return 0
-    frames = _frames(path, dur)
+    frames = _frames(path, dur, rv=vf_rotate(base))
     if not frames:
         return 0
-    score = {}
+    hits = {}
     for deg in (0, 90, 180, 270):
-        c = 0
+        hits[deg] = 0
         for f in frames:
             g = np.ascontiguousarray(np.rot90(f, k=-(deg // 90)))
-            c += len(_FACE.detectMultiScale(g, 1.1, 6, minSize=(24, 24)))
-        score[deg] = c
-    best = max(score, key=score.get)
-    if best != 0 and score[best] >= 2 and score[best] >= 2 * score[0] + 1:
+            if len(_FACE.detectMultiScale(g, 1.1, 8, minSize=(32, 32))):
+                hits[deg] += 1
+    best = max(hits, key=hits.get)
+    if best != 0 and hits[best] >= 2 and hits[0] == 0 and sorted(hits.values())[-2] == 0:
         return best
     return 0

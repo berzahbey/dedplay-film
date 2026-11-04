@@ -210,7 +210,6 @@ def plan(start, end, folder=None, target_minutes=15, photo_sec=3.5, video_sec=7.
         for k in groups:
             groups[k] = _pick(groups[k], alloc[k], photo_sec, video_sec, trans)
 
-    _ensure_orientation([i for v in groups.values() for i in v])
     chapters, dur = [], INTRO_SEC + OUTRO_SEC
     for k, items in groups.items():
         if not items:
@@ -254,18 +253,25 @@ def _rotated(r):
 
 def _ensure_orientation(items):
     """Seçilen videolarda yön kontrolü (bir kez yapılır, sonra kayıtlı)."""
-    todo = [r for r in items if r["kind"] == "video" and r.get("auto_rot") is None]
+    todo = [r for r in items if r["kind"] == "video" and (r.get("auto_rot") is None or r.get("meta_rot") is None)]
     if not todo:
         return
+
+    def work(r):
+        base = orient.meta_fix(r["path"])
+        return base, orient.detect_video(r["path"], r["duration"] or 0, base)
+
     with ThreadPoolExecutor(4) as ex:
-        res = list(ex.map(lambda r: orient.detect_video(r["path"], r["duration"] or 0), todo))
-    for r, rot in zip(todo, res):
-        r["auto_rot"] = rot
+        res = list(ex.map(work, todo))
+    for r, (base, rot) in zip(todo, res):
+        r["meta_rot"], r["auto_rot"] = base, rot
     with db.db() as con:
-        con.executemany("UPDATE media SET auto_rot=? WHERE id=?", [(rot, r["id"]) for r, rot in zip(todo, res)])
+        con.executemany("UPDATE media SET meta_rot=?, auto_rot=? WHERE id=?",
+                        [(b, a, r["id"]) for r, (b, a) in zip(todo, res)])
 
 
 def _public(r, role=None):
     return {"id": r["id"], "kind": r["kind"], "taken_at": r["taken_at"], "duration": r["duration"],
             "name": os.path.basename(r["path"]), "role": role, "rot": orient.effective(r),
-            "rot_auto": r.get("rotate_fix") is None and bool(r.get("auto_rot"))}
+            "rot_auto": r.get("rotate_fix") is None and bool(r.get("auto_rot")),
+            "rot_user": int(r["rotate_fix"]) if r.get("rotate_fix") is not None else None}

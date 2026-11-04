@@ -141,7 +141,8 @@ a{color:var(--ac)}
 </main>
 
 <script>
-const $=s=>document.querySelector(s), api=(u,o)=>fetch(u,o).then(r=>{if(!r.ok)return r.json().then(e=>{throw new Error(e.detail||r.status)});return r.json()});
+const $=s=>document.querySelector(s), api=(u,o)=>fetch(u,o).then(async r=>{const t=await r.text();let j=null;try{j=JSON.parse(t)}catch(e){}
+  if(!r.ok)throw new Error((j&&j.detail)||`Sunucu hatası ${r.status}: ${t.slice(0,200)}`);if(j===null)throw new Error('Sunucudan beklenmeyen cevap');return j});
 const post=(u,b)=>api(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});
 const AY=["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
 let style='sinematik', src='year', sel={}, folders=[], minutes=15, PLAN=null, off=new Set(), music=new Set();
@@ -210,8 +211,7 @@ function bindSelection(){
   document.querySelectorAll('.rotb').forEach(b=>{
     b.onmousedown=e=>e.stopPropagation();
     b.onclick=async e=>{e.stopPropagation();const id=+b.dataset.rid,it=allItems().find(x=>x.id==id);
-      const deg=((it.rot||0)+90)%360;
-      try{await post('/api/media/'+id+'/rotate',{deg});it.rot=deg;it.rot_auto=false;
+      try{const deg=(await post('/api/media/'+id+'/rotate',{step:90})).rot;it.rot=deg;it.rot_auto=false;
         const th=b.closest('.th');th.querySelector('img').src=`/api/thumb/${id}?r=${deg}`;th.querySelector('.rb')?.remove()}
       catch(err){alert('Döndürülemedi: '+err.message)}};
   });
