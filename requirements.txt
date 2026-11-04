@@ -3,3 +3,4 @@ uvicorn==0.34.0
 pillow==11.1.0
 pillow-heif==0.21.0
 numpy==2.2.2
+opencv-python-headless==4.10.0.84

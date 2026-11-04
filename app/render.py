@@ -18,7 +18,7 @@ import traceback
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
 
 from . import beats as beatmod
-from . import db, highlights, story, styles
+from . import db, highlights, reframe, story, styles
 from .analyze import load_image
 from .config import (CRF, FONT, FONT_BOLD, FPS, HEIGHT, OUTPUT_DIR, PRESET, THREADS, WIDTH,
                      WORK_DIR)
@@ -65,7 +65,19 @@ def probe(path):
     v = next((s for s in j.get("streams", []) if s.get("codec_type") == "video"), {})
     a = any(s.get("codec_type") == "audio" for s in j.get("streams", []))
     dur = float(j.get("format", {}).get("duration") or v.get("duration") or 0)
-    return {"has_audio": a, "transfer": v.get("color_transfer", ""), "duration": dur, "ok": bool(v)}
+    w, h = int(v.get("width") or 0), int(v.get("height") or 0)
+    rot = 0
+    try:
+        rot = int(float((v.get("tags") or {}).get("rotate", 0)))
+    except ValueError:
+        pass
+    for sd in v.get("side_data_list") or []:
+        if "rotation" in sd:
+            rot = int(sd["rotation"])
+    if abs(rot) % 180 == 90:
+        w, h = h, w  # telefon dik çekimi: görüntü döndürülerek gösterilir
+    return {"has_audio": a, "transfer": v.get("color_transfer", ""), "duration": dur, "ok": bool(v),
+            "w": w, "h": h}
 
 
 # ---------- Kareler ----------
@@ -210,12 +222,18 @@ def video_clip(src, out, start, frames, info, cuts=(), grade="", keep_audio=True
         # iPhone HDR (HLG/Dolby Vision) → normal SDR, renkler soluk çıkmasın
         tm = ("zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,"
               "tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p,")
-    fc = (f"[0:v]{tm}fps={FPS},split[a][b];"
-          f"[a]scale=480:270:force_original_aspect_ratio=increase,crop=480:270,boxblur=12:2,"
-          f"eq=brightness=-0.12,scale={WIDTH}:{HEIGHT}[bg];"
-          f"[b]scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=decrease[fg];"
-          f"[bg][fg]overlay=(W-w)/2:(H-h)/2,tpad=stop_mode=clone:stop_duration=5,setsar=1,"
-          f"format=yuv420p[b0]")
+    w, h = info.get("w") or 0, info.get("h") or 0
+    if w and h and w / h < 1.6:
+        # Dikey / kare / 4:3 video → tam ekran: önemli bölgeyi (yüz, hareket) takip eden kırpma
+        sh, ys = reframe.plan_crop(src, start, dur, w, h, frames, FPS, WIDTH, HEIGHT)
+        cmdf = reframe.sendcmd_file(ys, FPS, out + ".crop.txt")
+        fc = (f"[0:v]{tm}fps={FPS},scale={WIDTH}:{sh}:flags=lanczos,sendcmd=f='{cmdf}',"
+              f"crop@rf={WIDTH}:{HEIGHT}:0:{ys[0]},tpad=stop_mode=clone:stop_duration=5,setsar=1,"
+              f"format=yuv420p[b0]")
+    else:
+        fc = (f"[0:v]{tm}fps={FPS},scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=increase:flags=lanczos,"
+              f"crop={WIDTH}:{HEIGHT},tpad=stop_mode=clone:stop_duration=5,setsar=1,"
+              f"format=yuv420p[b0]")
     inputs = ["-ss", f"{start:.3f}", "-t", f"{dur + 0.5:.3f}", "-i", src]
     last = "b0"
     for k, (cpath, cstart, cframes) in enumerate(cuts, 1):
