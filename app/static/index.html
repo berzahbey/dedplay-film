@@ -49,7 +49,7 @@ label.f{display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--mu
 .job{border:1px solid var(--line);border-radius:10px;padding:14px;display:grid;gap:8px}
 .bar{height:7px;background:#0f1115;border-radius:9px;overflow:hidden}.bar i{display:block;height:100%;background:var(--ac);transition:width .5s}
 .st{font-size:12px;padding:2px 9px;border-radius:99px;background:var(--line)}
-button.ghost.del{color:var(--bad);border-color:#5a2226;font-size:13px;padding:5px 12px}.st.bitti{background:#163d2b;color:var(--ok)}.st.hata{background:#3d1618;color:var(--bad)}
+button.ghost.del{color:var(--bad);border-color:#5a2226;font-size:13px;padding:5px 12px}.selbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:4px}.selbar button{font-size:13px;padding:6px 12px}button.ghost.mini{font-size:12px;padding:3px 10px;margin-left:auto}.chap h3{align-items:center}.th{user-select:none}.st.bitti{background:#163d2b;color:var(--ok)}.st.hata{background:#3d1618;color:var(--bad)}
 video{width:100%;max-width:720px;border-radius:10px;background:#000}
 .hide{display:none!important}
 a{color:var(--ac)}
@@ -98,8 +98,17 @@ a{color:var(--ac)}
 </section>
 
 <section class="card hide" id="prevCard">
-  <h2><span class="n">2</span>Önizleme <span class="muted" style="font-weight:400">— istemediğin kareye tıkla, filmden çıkar</span></h2>
+  <h2><span class="n">2</span>Önizleme</h2>
   <div class="stats" id="stats"></div>
+  <div class="selbar">
+    <button class="ghost" data-a="none">☐ Hepsini kaldır</button>
+    <button class="ghost" data-a="all">☑ Hepsini seç</button>
+    <button class="ghost" data-a="inv">⇄ Tersine çevir</button>
+    <button class="ghost" data-a="videos">▶ Sadece videolar</button>
+    <button class="ghost" data-a="photos">▣ Sadece fotoğraflar</button>
+    <span class="muted" id="selInfo"></span>
+  </div>
+  <div class="muted" style="margin:6px 0 4px">İpucu: Tıkla = seç/kaldır · Basılı tutup kaydır = birden fazla kareyi boya · Shift + tıkla = aradaki her şey. Sadece istediklerini yapmak için önce "Hepsini kaldır"a bas, sonra istediklerini seç.</div>
   <div id="chapters"></div>
 </section>
 
@@ -191,13 +200,35 @@ $('#planBtn').onclick=async()=>{
   }catch(e){alert('Hata: '+e.message)}
   $('#planBtn').disabled=false;$('#planBtn').textContent='Kareleri seç';
 };
+// --- toplu seçim
+const allItems=()=>PLAN?PLAN.chapters.flatMap(c=>c.items):[];
+function setOff(id,v){v?off.add(id):off.delete(id);const t=document.querySelector(`.th[data-id="${id}"]`);if(t)t.classList.toggle('off',v)}
+function refreshSel(){const n=allItems().length;$('#selInfo').textContent=`${fmt(n-off.size)} / ${fmt(n)} kare seçili`;updInfo()}
+let paint=null,lastClick=null,moved=false;
+function bindSelection(){
+  const ths=[...document.querySelectorAll('.th')], order=ths.map(t=>+t.dataset.id);
+  ths.forEach(t=>{
+    t.ondragstart=e=>e.preventDefault();
+    t.onmousedown=e=>{e.preventDefault();const id=+t.dataset.id;
+      if(e.shiftKey&&lastClick!==null){const a=order.indexOf(lastClick),b=order.indexOf(id),v=off.has(lastClick);
+        order.slice(Math.min(a,b),Math.max(a,b)+1).forEach(x=>setOff(x,v));refreshSel();return}
+      paint=!off.has(id);moved=false;setOff(id,paint);lastClick=id;refreshSel()};
+    t.onmouseenter=()=>{if(paint!==null){moved=true;setOff(+t.dataset.id,paint);refreshSel()}};
+  });
+  document.querySelectorAll('[data-ch]').forEach(b=>b.onclick=()=>{const its=PLAN.chapters[+b.dataset.ch].items;
+    const anyOn=its.some(i=>!off.has(i.id));its.forEach(i=>setOff(i.id,anyOn));refreshSel()});
+  refreshSel();
+}
+document.addEventListener('mouseup',()=>paint=null);
+document.querySelector('.selbar').onclick=e=>{const a=e.target.dataset.a;if(!a||!PLAN)return;
+  allItems().forEach(i=>setOff(i.id,a=='none'?true:a=='all'?false:a=='inv'?!off.has(i.id):a=='videos'?i.kind!='video':i.kind!='photo'));refreshSel()};
 function drawPlan(){
   const s=PLAN.stats; $('#prevCard').classList.remove('hide');$('#musicCard').classList.remove('hide');
   if(!PLAN.chapters.length){$('#stats').innerHTML='Bu aralıkta kare bulunamadı.';$('#chapters').innerHTML='';return}
   $('#stats').innerHTML=`<b>${fmt(s.total)}</b> dosya bulundu · <b>${fmt(s.chosen)}</b> kare seçildi · ${fmt(s.duplicates)} benzer kare, ${fmt(s.blurry)} bulanık, ${fmt(s.filtered)} ekran görüntüsü/Live Photo elendi · ${PLAN.mode=='day'?'günlere':'aylara'} göre bölümlendi${s.cutaways?` · <b>${s.cutaways}</b> fotoğraf videolara ara plan oldu`:''}${s.pairs?` · ${s.pairs} ikili kare`:''}${PLAN.scan_running?'<br>⏳ Tarama sürüyor: şu ana kadar taranan dosyalarla seçildi. Tarama bitince tekrar "Kareleri seç"e basarsan yeni dosyalar da eklenir.':''}`;
-  $('#chapters').innerHTML=PLAN.chapters.map((c,ci)=>`<div class="chap"><h3>${c.title} <small>${c.subtitle} · ${c.items.length} kare</small></h3><div class="grid">${
+  $('#chapters').innerHTML=PLAN.chapters.map((c,ci)=>`<div class="chap"><h3>${c.title} <small>${c.subtitle} · ${c.items.length} kare</small><button class="ghost mini" data-ch="${ci}">bölümü seç / kaldır</button></h3><div class="grid">${
     c.items.map(i=>`<div class="th" data-id="${i.id}" title="${i.name}\n${i.taken_at}"><img loading="lazy" src="/api/thumb/${i.id}">${i.kind=='video'?`<span class="b">▶ ${Math.round(i.duration||0)} sn</span>`:''}${i.role=='cutaway'?'<span class="b" style="left:5px;right:auto">↳ ara plan</span>':''}${i.role=='pair'?'<span class="b" style="left:5px;right:auto">⧉ ikili</span>':''}</div>`).join('')}</div></div>`).join('');
-  document.querySelectorAll('.th').forEach(t=>t.onclick=()=>{const id=+t.dataset.id;off.has(id)?off.delete(id):off.add(id);t.classList.toggle('off');updInfo()});
+  bindSelection();
   updInfo(); if(!$('#musicDir').options.length)loadMusic();
 }
 ['photoSec','videoSec','chTitles'].forEach(id=>$('#'+id).addEventListener('change',updInfo));
@@ -219,6 +250,7 @@ $('#mNone').onclick=()=>{music.clear();$('#musicList').querySelectorAll('input')
 // --- render
 $('#renderBtn').onclick=async()=>{
   if(!PLAN)return;
+  if(off.size>=allItems().length){alert('Hiç kare seçili değil.');return}
   const chapters=PLAN.chapters.map(c=>({title:c.title,subtitle:c.subtitle,ids:c.items.filter(i=>!off.has(i.id)).map(i=>i.id)})).filter(c=>c.ids.length);
   try{await post('/api/render',{title:$('#title').value||PLAN.title,range_text:PLAN.range_text,chapters,music:[...music],
     music_volume:+$('#mVol').value,video_audio:$('#vAudio').checked,chapter_titles:$('#chTitles').checked,
