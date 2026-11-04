@@ -49,7 +49,7 @@ label.f{display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--mu
 .job{border:1px solid var(--line);border-radius:10px;padding:14px;display:grid;gap:8px}
 .bar{height:7px;background:#0f1115;border-radius:9px;overflow:hidden}.bar i{display:block;height:100%;background:var(--ac);transition:width .5s}
 .st{font-size:12px;padding:2px 9px;border-radius:99px;background:var(--line)}
-button.ghost.del{color:var(--bad);border-color:#5a2226;font-size:13px;padding:5px 12px}.selbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:4px}.selbar button{font-size:13px;padding:6px 12px}button.ghost.mini{font-size:12px;padding:3px 10px;margin-left:auto}.chap h3{align-items:center}.th{user-select:none}.st.bitti{background:#163d2b;color:var(--ok)}.st.hata{background:#3d1618;color:var(--bad)}
+button.ghost.del{color:var(--bad);border-color:#5a2226;font-size:13px;padding:5px 12px}.rotb{position:absolute;top:5px;right:5px;width:28px;height:28px;border-radius:50%;border:0;background:rgba(0,0,0,.65);color:#fff;font-size:16px;cursor:pointer;opacity:0;transition:.15s}.th:hover .rotb{opacity:1}.rb{top:5px;bottom:auto!important;left:5px;right:auto!important;background:#2a2214!important;color:var(--ac)}@media (hover:none){.rotb{opacity:.85}}.selbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:4px}.selbar button{font-size:13px;padding:6px 12px}button.ghost.mini{font-size:12px;padding:3px 10px;margin-left:auto}.chap h3{align-items:center}.th{user-select:none}.st.bitti{background:#163d2b;color:var(--ok)}.st.hata{background:#3d1618;color:var(--bad)}
 video{width:100%;max-width:720px;border-radius:10px;background:#000}
 .hide{display:none!important}
 a{color:var(--ac)}
@@ -108,7 +108,7 @@ a{color:var(--ac)}
     <button class="ghost" data-a="photos">▣ Sadece fotoğraflar</button>
     <span class="muted" id="selInfo"></span>
   </div>
-  <div class="muted" style="margin:6px 0 4px">İpucu: Tıkla = seç/kaldır · Basılı tutup kaydır = birden fazla kareyi boya · Shift + tıkla = aradaki her şey. Sadece istediklerini yapmak için önce "Hepsini kaldır"a bas, sonra istediklerini seç.</div>
+  <div class="muted" style="margin:6px 0 4px">İpucu: Yan ya da ters duran bir kare varsa üzerine gelip ↻ ile döndür · Tıkla = seç/kaldır · Basılı tutup kaydır = birden fazla kareyi boya · Shift + tıkla = aradaki her şey. Sadece istediklerini yapmak için önce "Hepsini kaldır"a bas, sonra istediklerini seç.</div>
   <div id="chapters"></div>
 </section>
 
@@ -207,6 +207,14 @@ function refreshSel(){const n=allItems().length;$('#selInfo').textContent=`${fmt
 let paint=null,lastClick=null,moved=false;
 function bindSelection(){
   const ths=[...document.querySelectorAll('.th')], order=ths.map(t=>+t.dataset.id);
+  document.querySelectorAll('.rotb').forEach(b=>{
+    b.onmousedown=e=>e.stopPropagation();
+    b.onclick=async e=>{e.stopPropagation();const id=+b.dataset.rid,it=allItems().find(x=>x.id==id);
+      const deg=((it.rot||0)+90)%360;
+      try{await post('/api/media/'+id+'/rotate',{deg});it.rot=deg;it.rot_auto=false;
+        const th=b.closest('.th');th.querySelector('img').src=`/api/thumb/${id}?r=${deg}`;th.querySelector('.rb')?.remove()}
+      catch(err){alert('Döndürülemedi: '+err.message)}};
+  });
   ths.forEach(t=>{
     t.ondragstart=e=>e.preventDefault();
     t.onmousedown=e=>{e.preventDefault();const id=+t.dataset.id;
@@ -227,7 +235,7 @@ function drawPlan(){
   if(!PLAN.chapters.length){$('#stats').innerHTML='Bu aralıkta kare bulunamadı.';$('#chapters').innerHTML='';return}
   $('#stats').innerHTML=`<b>${fmt(s.total)}</b> dosya bulundu · <b>${fmt(s.chosen)}</b> kare seçildi · ${fmt(s.duplicates)} benzer kare, ${fmt(s.blurry)} bulanık, ${fmt(s.filtered)} ekran görüntüsü/Live Photo elendi · ${PLAN.mode=='day'?'günlere':'aylara'} göre bölümlendi${s.cutaways?` · <b>${s.cutaways}</b> fotoğraf videolara ara plan oldu`:''}${s.pairs?` · ${s.pairs} ikili kare`:''}${PLAN.scan_running?'<br>⏳ Tarama sürüyor: şu ana kadar taranan dosyalarla seçildi. Tarama bitince tekrar "Kareleri seç"e basarsan yeni dosyalar da eklenir.':''}`;
   $('#chapters').innerHTML=PLAN.chapters.map((c,ci)=>`<div class="chap"><h3>${c.title} <small>${c.subtitle} · ${c.items.length} kare</small><button class="ghost mini" data-ch="${ci}">bölümü seç / kaldır</button></h3><div class="grid">${
-    c.items.map(i=>`<div class="th" data-id="${i.id}" title="${i.name}\n${i.taken_at}"><img loading="lazy" src="/api/thumb/${i.id}">${i.kind=='video'?`<span class="b">▶ ${Math.round(i.duration||0)} sn</span>`:''}${i.role=='cutaway'?'<span class="b" style="left:5px;right:auto">↳ ara plan</span>':''}${i.role=='pair'?'<span class="b" style="left:5px;right:auto">⧉ ikili</span>':''}</div>`).join('')}</div></div>`).join('');
+    c.items.map(i=>`<div class="th" data-id="${i.id}" title="${i.name}\n${i.taken_at}"><img loading="lazy" src="/api/thumb/${i.id}?r=${i.rot||0}"><button class="rotb" data-rid="${i.id}" title="Yan ya da ters duruyorsa döndür (saat yönünde 90°)">↻</button>${i.rot_auto?'<span class="b rb" title="Yüzlere bakılarak otomatik döndürüldü">↻ oto</span>':''}${i.kind=='video'?`<span class="b">▶ ${Math.round(i.duration||0)} sn</span>`:''}${i.role=='cutaway'?'<span class="b" style="left:5px;right:auto">↳ ara plan</span>':''}${i.role=='pair'?'<span class="b" style="left:5px;right:auto">⧉ ikili</span>':''}</div>`).join('')}</div></div>`).join('');
   bindSelection();
   updInfo(); if(!$('#musicDir').options.length)loadMusic();
 }

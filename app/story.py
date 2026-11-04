@@ -46,7 +46,7 @@ def segments(dur, video_sec, starts=None):
     n = seg_count(dur, video_sec)
     if n == 0:
         return [(0.0, max(dur, 1.0))]
-    if not starts or len(starts) != n:
+    if not starts:
         step = dur / (n + 1)
         starts = [min(max(0.0, step * (i + 1) - video_sec / 2), dur - video_sec) for i in range(n)]
     return [(s, video_sec) for s in starts]

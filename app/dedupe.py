@@ -66,13 +66,22 @@ def _photo_pairs(rows, uf):
             buckets[k].append(r)
 
 
+def _video_parts(h):
+    """Videonun 3 kare izinden anlamlı olanlar (düz siyah/tek renk kareler sayılmaz)."""
+    return [h[i * 64:(i + 1) * 64] for i in range(3)]
+
+
 def _video_pairs(rows, uf):
     rows = sorted(rows, key=lambda r: r["duration"] or 0)
     for i, a in enumerate(rows):
+        pa = _video_parts(a["dhash"])
         for b in rows[i + 1:]:
             if (b["duration"] or 0) - (a["duration"] or 0) > 1.0:
                 break
-            if hamming(a["dhash"], b["dhash"]) <= VIDEO_MAX_DIFF:
+            pb = _video_parts(b["dhash"])
+            # her iki videoda da anlamlı olan karelerden en az 2'si benzer olmalı
+            good = [(x, y) for x, y in zip(pa, pb) if _informative(x) and _informative(y)]
+            if len(good) >= 2 and sum(hamming(x, y) for x, y in good) <= VIDEO_MAX_DIFF * len(good) / 3:
                 uf.union(a["id"], b["id"])
 
 

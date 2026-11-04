@@ -6,6 +6,7 @@ geçiş efektleriyle (xfade) birleştirilir → müzik ve video sesleri miksajla
 Tüm süreler kare (frame) cinsinden hesaplanır; böylece geçişler ve ses kayma yapmaz.
 """
 import json
+import math
 import os
 import queue
 import re
@@ -18,7 +19,7 @@ import traceback
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
 
 from . import beats as beatmod
-from . import db, highlights, reframe, story, styles
+from . import db, highlights, orient, reframe, story, styles
 from .analyze import load_image
 from .config import (CRF, FONT, FONT_BOLD, FPS, HEIGHT, OUTPUT_DIR, PRESET, THREADS, WIDTH,
                      WORK_DIR)
@@ -57,6 +58,31 @@ def _venc(crf=None):
 
 
 AENC = ["-c:a", "pcm_s16le", "-ar", "48000", "-ac", "2"]
+
+
+_HAS_VIDSTAB = None
+
+
+def has_vidstab():
+    global _HAS_VIDSTAB
+    if _HAS_VIDSTAB is None:
+        out = subprocess.run(["ffmpeg", "-hide_banner", "-filters"], capture_output=True).stdout.decode()
+        _HAS_VIDSTAB = " vidstabdetect " in out and " vidstabtransform " in out
+    return _HAS_VIDSTAB
+
+
+def _stabilize(src, start, dur, rv, trf):
+    """1. geçiş: kamera sallantısını ölç. Dönüş: vidstabtransform filtresi (ya da boş)."""
+    try:
+        _run(["ffmpeg", "-y", "-v", "error", "-ss", f"{start:.3f}", "-t", f"{dur + 0.5:.3f}", "-i", src,
+              "-vf", f"{rv + ',' if rv else ''}vidstabdetect=shakiness=6:accuracy=9:result='{trf}'",
+              "-f", "null", "-"], timeout=1800)
+    except Exception:
+        traceback.print_exc()
+        return ""
+    # 2. geçiş: yumuşatılmış kamera yolu; kenarlar hafif zoom ile gizlenir, sonra hafif keskinleştirme
+    return (f"vidstabtransform=input='{trf}':smoothing=25:optzoom=1:zoomspeed=0.25:interpol=bicubic,"
+            f"unsharp=5:5:0.6:3:3:0,")
 
 
 def has_zscale():
@@ -199,35 +225,69 @@ def title_frame(out, title, subtitle="", bg_path=None, big=False):
 
 # ---------- Klipler (tam kare sayısıyla) ----------
 
-KB = [  # Ken Burns hareketleri (zoom, x, y)
-    ("1+0.10*on/{N}", "(iw-iw/zoom)/2", "(ih-ih/zoom)/2"),
-    ("1.10-0.10*on/{N}", "(iw-iw/zoom)/2", "(ih-ih/zoom)/2"),
-    ("1.08", "(iw-iw/zoom)*on/{N}", "(ih-ih/zoom)/2"),
-    ("1.08", "(iw-iw/zoom)*(1-on/{N})", "(ih-ih/zoom)/2"),
-    ("1+0.08*on/{N}", "(iw-iw/zoom)*0.3", "(ih-ih/zoom)*0.35"),
+# Ken Burns hareketleri: (zoom başı, zoom sonu, yatay konum başı→sonu, dikey konum başı→sonu)
+# Konumlar boş alanın oranıdır (0 = sol/üst, 1 = sağ/alt). Kareler alt-piksel hassasiyetle
+# hesaplanır (OpenCV), böylece FFmpeg zoompan'daki titreme/sarsıntı olmaz.
+KB = [
+    (1.00, 1.10, (0.5, 0.5), (0.5, 0.5)),
+    (1.10, 1.00, (0.5, 0.5), (0.5, 0.5)),
+    (1.08, 1.08, (0.0, 1.0), (0.5, 0.5)),
+    (1.08, 1.08, (1.0, 0.0), (0.5, 0.5)),
+    (1.00, 1.08, (0.3, 0.3), (0.35, 0.35)),
 ]
+SRC_SCALE = 1.4  # kaynak kare çıkışın 1.4 katı (keskinlik + hız dengesi)
 
 
-def _kb(idx, n):
-    z, x, y = (s.format(N=n) for s in KB[idx % len(KB)])
-    return f"zoompan=z='{z}':x='{x}':y='{y}':d={n}:s={WIDTH}x{HEIGHT}:fps={FPS},setsar=1"
+def _ease(t):
+    return 0.5 - 0.5 * math.cos(math.pi * t)
+
+
+def _kb_frames(frame, frames, idx):
+    import cv2
+    import numpy as np
+    sw, shh = int(WIDTH * SRC_SCALE), int(HEIGHT * SRC_SCALE)
+    img = Image.open(frame).convert("RGB")
+    if img.size != (sw, shh):
+        img = img.resize((sw, shh), Image.LANCZOS)
+    src = np.asarray(img)
+    z0, z1, (x0, x1), (y0, y1) = KB[idx % len(KB)]
+    for i in range(frames):
+        t = _ease(i / max(1, frames - 1))
+        z = z0 + (z1 - z0) * t
+        fx, fy = x0 + (x1 - x0) * t, y0 + (y1 - y0) * t
+        w, h = sw / z, shh / z
+        ox, oy = (sw - w) * fx, (shh - h) * fy
+        sx, sy = w / WIDTH, h / HEIGHT
+        m = np.array([[1 / sx, 0, -ox / sx], [0, 1 / sy, -oy / sy]], np.float64)
+        yield cv2.warpAffine(src, m, (WIDTH, HEIGHT), flags=cv2.INTER_AREA if sx > 1.05 else cv2.INTER_CUBIC,
+                             borderMode=cv2.BORDER_REFLECT).tobytes()
 
 
 def still_clip(frame, out, frames, idx, grade="", fade_in=0, fade_out=0, audio=True):
-    vf = _kb(idx, frames)
+    vf = "setsar=1"
     if grade:
         vf += "," + grade
     if fade_in:
         vf += f",fade=t=in:st=0:d={fade_in}"
     if fade_out:
         vf += f",fade=t=out:st={frames / FPS - fade_out:.3f}:d={fade_out}"
-    cmd = ["ffmpeg", "-y", "-v", "error", "-i", frame]
+    cmd = ["ffmpeg", "-y", "-v", "error", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{WIDTH}x{HEIGHT}",
+           "-r", str(FPS), "-i", "-"]
     if audio:
         cmd += ["-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo", "-af",
                 f"atrim=end_sample={frames * SPF}"]
-    cmd += ["-vf", vf, "-frames:v", str(frames), *_venc(17)]
+    cmd += ["-vf", vf + f",trim=end_frame={frames}", *_venc(17)]
     cmd += [*AENC] if audio else ["-an"]
-    _run(cmd + [out])
+    proc = subprocess.Popen(cmd + [out], stdin=subprocess.PIPE, stderr=subprocess.PIPE)
+    try:
+        for buf in _kb_frames(frame, frames, idx):
+            proc.stdin.write(buf)
+        proc.stdin.close()
+    except BrokenPipeError:
+        pass
+    err = proc.stderr.read().decode("utf-8", "replace")
+    if proc.wait(timeout=600) != 0:
+        raise RuntimeError(err[-600:])
 
 
 def video_clip(src, out, start, frames, info, cuts=(), grade="", keep_audio=True, safe=False):
@@ -243,13 +303,18 @@ def video_clip(src, out, start, frames, info, cuts=(), grade="", keep_audio=True
               "zscale=p=bt709,tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p,")
     if safe:
         tm = ""
-    w, h = info.get("w") or 0, info.get("h") or 0
     vdur = info.get("vdur") or info.get("duration") or 0
     if vdur:
         start = max(0.0, min(start, vdur - 1.0))
+    rv = orient.vf_rotate(info.get("rot"))
+    if rv:  # elle ya da otomatik yön düzeltmesi
+        tm = f"{tm}{rv},"
+    if info.get("stabilize", True) and not safe and has_vidstab():
+        tm += _stabilize(src, max(0.0, start), dur, rv, out + ".trf")
+    w, h = info.get("w") or 0, info.get("h") or 0
     if w and h and w / h < 1.6 and not safe:
         # Dikey / kare / 4:3 video → tam ekran: önemli bölgeyi (yüz, hareket) takip eden kırpma
-        sh, ys = reframe.plan_crop(src, start, dur, w, h, frames, FPS, WIDTH, HEIGHT)
+        sh, ys = reframe.plan_crop(src, start, dur, w, h, frames, FPS, WIDTH, HEIGHT, rv)
         cmdf = reframe.sendcmd_file(ys, FPS, out + ".crop.txt")
         fc = (f"[0:v]{tm}fps={FPS},scale={WIDTH}:{sh}:flags=lanczos,sendcmd=f='{cmdf}',"
               f"crop@rf={WIDTH}:{HEIGHT}:0:{ys[0]},tpad=stop_mode=clone:stop_duration=5,setsar=1,"
@@ -268,18 +333,20 @@ def video_clip(src, out, start, frames, info, cuts=(), grade="", keep_audio=True
                f"setpts=PTS-STARTPTS+{cstart / FPS:.4f}/TB[c{k}];"
                f"[{last}][c{k}]overlay=eof_action=pass:repeatlast=0,format=yuv420p[b{k}]")
         last = f"b{k}"
-    fc += f";[{last}]{grade + ',' if grade else ''}null[v]"
+    fc += f";[{last}]{grade + ',' if grade else ''}trim=end_frame={frames},setpts=PTS-STARTPTS[v]"
     ns = frames * SPF
     if keep_audio and info["has_audio"]:
         fc += (f";[0:a]aresample=48000,aformat=channel_layouts=stereo,highpass=f=80,"
-               f"loudnorm=I=-20:TP=-2:LRA=11,afade=t=in:d=0.08,apad,atrim=end_sample={ns}[aout]")
+               # loudnorm çıkışı 192 kHz'dir → tekrar 48 kHz'e indir, yoksa ses kısa kesilir ve kayar
+               f"loudnorm=I=-20:TP=-2:LRA=11,aresample=48000,afade=t=in:d=0.08,"
+               f"apad,atrim=end_sample={ns},asetpts=PTS-STARTPTS[aout]")
         amap = "[aout]"
     else:
         inputs += ["-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo"]
         fc += f";[{len(cuts) + 1}:a]atrim=end_sample={ns}[aout]"
         amap = "[aout]"
     _run(["ffmpeg", "-y", "-v", "error", *inputs, "-filter_complex", fc, "-map", "[v]",
-          "-map", amap, "-frames:v", str(frames), *_venc(17), *AENC, out])
+          "-map", amap, *_venc(17), *AENC, out])
 
 
 # ---------- Doğrulama ve yedek planlar ----------
@@ -293,14 +360,18 @@ def _valid(path, frames):
                        capture_output=True, timeout=120)
     try:
         w, h, n = p.stdout.decode().strip().split(",")[:3]
-        return int(w) == WIDTH and int(h) == HEIGHT and abs(int(n) - frames) <= 1
+        if not (int(w) == WIDTH and int(h) == HEIGHT and abs(int(n) - frames) <= 1):
+            return False
+        a = subprocess.run(["ffmpeg", "-v", "error", "-i", path, "-map", "0:a:0", "-f", "s16le", "-ac", "1",
+                            "-ar", "48000", "-"], capture_output=True, timeout=120).stdout
+        return abs(len(a) // 2 - frames * SPF) <= SPF  # ses de görüntüyle aynı uzunlukta olmalı
     except ValueError:
         return False
 
 
 def _solid(out, frames):
     _run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", f"color=c=0x0e1016:s={WIDTH}x{HEIGHT}:r={FPS}",
-          "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo", "-frames:v", str(frames),
+          "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo", "-vf", f"trim=end_frame={frames}",
           "-af", f"atrim=end_sample={frames * SPF}", *_venc(), *AENC, out])
 
 
@@ -317,8 +388,9 @@ def _rescue(c, out, L, n, grade, work, last_frame, p, infos, err):
             traceback.print_exc()
         try:
             fr = os.path.join(work, f"vf{n}.jpg")
+            rv = orient.vf_rotate(infos[r["id"]].get("rot"))
             subprocess.run(["ffmpeg", "-y", "-v", "error", "-ss", f"{c['start'] + 1:.2f}", "-i", r["path"],
-                            "-frames:v", "1", fr], timeout=120)
+                            *(["-vf", rv] if rv else []), "-frames:v", "1", fr], timeout=120)
             if os.path.exists(fr):
                 photo_frame(fr, fr)
                 still_clip(fr, out, L, n, grade)
@@ -365,9 +437,9 @@ def _join(items, df, out, work, tag, retry=True):
                f"[{prev_a}][{i}:a]acrossfade=d={ds:.4f}:c1=tri:c2=tri[{ta}];")
         acc += items[i][1] - df
         prev_v, prev_a = tv, ta
-    fc = fc.rstrip(";")
-    cmd = ["ffmpeg", "-y", "-v", "error", *args, "-filter_complex", fc, "-map", f"[{prev_v}]",
-           "-map", f"[{prev_a}]", "-frames:v", str(acc), *_venc(), *AENC, out]
+    fc += f"[{prev_v}]trim=end_frame={acc}[vo];[{prev_a}]atrim=end_sample={acc * SPF}[ao]"
+    cmd = ["ffmpeg", "-y", "-v", "error", *args, "-filter_complex", fc, "-map", "[vo]",
+           "-map", "[ao]", *_venc(), *AENC, out]
     try:
         _run(cmd, timeout=7200)
     except RuntimeError as e:
@@ -379,9 +451,9 @@ def _join(items, df, out, work, tag, retry=True):
         for i, (pth, fr, tr) in enumerate(items):  # tüm klipleri aynı biçime getir
             npth = os.path.join(work, f"{tag}_n{i}.mkv")
             _run(["ffmpeg", "-y", "-v", "error", "-i", pth, "-vf",
-                  f"fps={FPS},scale={WIDTH}:{HEIGHT},setsar=1,format=yuv420p",
+                  f"fps={FPS},scale={WIDTH}:{HEIGHT},setsar=1,format=yuv420p,trim=end_frame={fr}",
                   "-af", f"aresample=48000,aformat=channel_layouts=stereo,apad,atrim=end_sample={fr * SPF}",
-                  "-frames:v", str(fr), *_venc(), *AENC, npth])
+                  *_venc(), *AENC, npth])
             norm.append((npth, fr, "fade"))
         return _join(norm, df, out, work, tag + "n", retry=False)
     for p, _, _ in items:
@@ -521,10 +593,23 @@ def _render(jid, p):
                 con.execute(f"SELECT * FROM media WHERE id IN ({','.join('?' * len(ids))})", ids)}
     infos = {}
     for i, r in list(rows.items()):  # bozuk/okunamayan dosyaları baştan ayıkla
+        rot = orient.effective(r)
+        if rot in (90, 270) and r.get("width") and r.get("height"):
+            r["width"], r["height"] = r["height"], r["width"]
         if not os.path.exists(r["path"]):
             rows.pop(i)
+        elif r["kind"] == "photo" and rot:
+            try:  # döndürülmüş kopya (sadece bu film için, orijinale dokunulmaz)
+                rp = os.path.join(work, f"rot{i}.jpg")
+                load_image(r["path"], 4000).rotate(-rot, expand=True).save(rp, quality=93)
+                r["path"] = rp
+            except Exception:
+                traceback.print_exc()
         elif r["kind"] == "video":
             infos[i] = probe(r["path"])
+            infos[i]["rot"] = rot
+            if rot in (90, 270):
+                infos[i]["w"], infos[i]["h"] = infos[i]["h"], infos[i]["w"]
             if not infos[i]["ok"] or infos[i]["duration"] < 0.8:
                 rows.pop(i)
             else:
@@ -532,8 +617,8 @@ def _render(jid, p):
                 n = story.seg_count(r["duration"], video_sec)
                 if n:  # uzun video: en iyi anları bul (sonuç önbelleğe yazılır)
                     _set(jid, message=f"Videodaki en iyi anlar aranıyor: {os.path.basename(r['path'])}")
-                    hl = highlights.get(r, r["path"], r["duration"])
-                    if not r.get("highlights"):
+                    hl = highlights.get(r, r["path"], r["duration"], orient.vf_rotate(rot))
+                    if r.get("highlights") != json.dumps(hl):
                         with db.db() as con:
                             con.execute("UPDATE media SET highlights=? WHERE id=?", (json.dumps(hl), i))
                     r["hl_starts"] = highlights.pick(hl, r["duration"], n, video_sec)
@@ -545,8 +630,10 @@ def _render(jid, p):
         for i in idlist:
             if i in rows:
                 out = os.path.join(work, f"vbg{i}.jpg")
+                rv = orient.vf_rotate(infos.get(i, {}).get("rot"))
                 subprocess.run(["ffmpeg", "-y", "-v", "error", "-ss", f"{rows[i]['duration'] * 0.3:.2f}",
-                                "-i", rows[i]["path"], "-frames:v", "1", out], timeout=120)
+                                "-i", rows[i]["path"], *(["-vf", rv] if rv else []), "-frames:v", "1", out],
+                               timeout=120)
                 if os.path.exists(out):
                     return out
         return None

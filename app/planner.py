@@ -8,7 +8,8 @@ from datetime import datetime, date
 from . import db
 from .analyze import hamming
 from .dedupe import find_duplicates
-from . import story, styles
+from . import orient, story, styles
+from concurrent.futures import ThreadPoolExecutor
 
 AYLAR = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos",
          "Eylül", "Ekim", "Kasım", "Aralık"]
@@ -209,6 +210,7 @@ def plan(start, end, folder=None, target_minutes=15, photo_sec=3.5, video_sec=7.
         for k in groups:
             groups[k] = _pick(groups[k], alloc[k], photo_sec, video_sec, trans)
 
+    _ensure_orientation([i for v in groups.values() for i in v])
     chapters, dur = [], INTRO_SEC + OUTRO_SEC
     for k, items in groups.items():
         if not items:
@@ -219,7 +221,7 @@ def plan(start, end, folder=None, target_minutes=15, photo_sec=3.5, video_sec=7.
         else:
             y, m = map(int, k.split("-"))
             ttl, sub = AYLAR[m - 1], str(y)
-        units = story.build_units(items, video_sec)
+        units = story.build_units([_rotated(i) for i in items], video_sec)
         role = {}
         for u in units:
             if u["type"] == "pair":
@@ -243,6 +245,27 @@ def plan(start, end, folder=None, target_minutes=15, photo_sec=3.5, video_sec=7.
             "range_text": tr_range(d0, d1) if tr_range(d0, d1).isdigit() else tr_range(first, last)}
 
 
+def _rotated(r):
+    rot = orient.effective(r)
+    if rot in (90, 270) and r.get("width") and r.get("height"):
+        r = dict(r, width=r["height"], height=r["width"])
+    return r
+
+
+def _ensure_orientation(items):
+    """Seçilen videolarda yön kontrolü (bir kez yapılır, sonra kayıtlı)."""
+    todo = [r for r in items if r["kind"] == "video" and r.get("auto_rot") is None]
+    if not todo:
+        return
+    with ThreadPoolExecutor(4) as ex:
+        res = list(ex.map(lambda r: orient.detect_video(r["path"], r["duration"] or 0), todo))
+    for r, rot in zip(todo, res):
+        r["auto_rot"] = rot
+    with db.db() as con:
+        con.executemany("UPDATE media SET auto_rot=? WHERE id=?", [(rot, r["id"]) for r, rot in zip(todo, res)])
+
+
 def _public(r, role=None):
     return {"id": r["id"], "kind": r["kind"], "taken_at": r["taken_at"], "duration": r["duration"],
-            "name": os.path.basename(r["path"]), "role": role}
+            "name": os.path.basename(r["path"]), "role": role, "rot": orient.effective(r),
+            "rot_auto": r.get("rotate_fix") is None and bool(r.get("auto_rot"))}

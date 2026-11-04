@@ -22,10 +22,10 @@ SAMPLE_FPS = 4
 AW = 270  # analiz genişliği
 
 
-def _sample(path, start, dur, w, h):
+def _sample(path, start, dur, w, h, rv=""):
     ah = int(round(AW * h / w / 2)) * 2
     p = subprocess.run(["ffmpeg", "-v", "error", "-ss", f"{start:.3f}", "-t", f"{dur:.3f}", "-i", path,
-                        "-vf", f"fps={SAMPLE_FPS},scale={AW}:{ah},format=gray", "-f", "rawvideo", "-"],
+                        "-vf", f"{rv + ',' if rv else ''}fps={SAMPLE_FPS},scale={AW}:{ah},format=gray", "-f", "rawvideo", "-"],
                        capture_output=True, timeout=600)
     n = len(p.stdout) // (AW * ah)
     if n == 0:
@@ -71,14 +71,14 @@ def _targets(frames, ah):
     return ys, conf
 
 
-def plan_crop(path, start, dur, w, h, frames_out, fps=30, out_w=1920, out_h=1080):
+def plan_crop(path, start, dur, w, h, frames_out, fps=30, out_w=1920, out_h=1080, rv=""):
     """Dönüş: (ölçekli_yükseklik, her çıkış karesi için kırpma y değeri listesi)."""
     sh = int(round(out_w * h / w / 2)) * 2
     span = sh - out_h
     if span <= 0:
         return sh, [0] * frames_out
     default = 0.42
-    fr, ah = _sample(path, start, dur, w, h)
+    fr, ah = _sample(path, start, dur, w, h, rv)
     if fr is None or len(fr) == 0:
         y = int(np.clip(default * sh - out_h / 2, 0, span))
         return sh, [y] * frames_out

@@ -5,7 +5,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 
-from . import db, planner, render, scanner, styles
+from . import db, orient, planner, render, scanner, styles
 from .analyze import load_image
 from .config import MEDIA_DIRS, MUSIC_DEFAULT, MUSIC_DIR, MUSIC_EXT, OUTPUT_DIR, THUMB_DIR
 
@@ -84,23 +84,41 @@ def folders():
 
 @app.get("/api/thumb/{mid}")
 def thumb(mid: int):
-    out = os.path.join(THUMB_DIR, f"{mid}.jpg")
+    with db.db() as con:
+        r = con.execute("SELECT path, kind, rotate_fix, auto_rot FROM media WHERE id=?", (mid,)).fetchone()
+    if not r:
+        raise HTTPException(404)
+    rot = orient.effective(dict(r))
+    out = os.path.join(THUMB_DIR, f"{mid}_r{rot}.jpg")
     if not os.path.exists(out):
-        with db.db() as con:
-            r = con.execute("SELECT path, kind FROM media WHERE id=?", (mid,)).fetchone()
-        if not r:
-            raise HTTPException(404)
         try:
             if r["kind"] == "photo":
-                load_image(r["path"], 360).save(out, quality=80)
+                load_image(r["path"], 360).rotate(-rot, expand=True).save(out, quality=80)
             else:
+                rv = orient.vf_rotate(rot)
                 subprocess.run(["ffmpeg", "-y", "-v", "error", "-ss", "1", "-i", r["path"],
-                                "-frames:v", "1", "-vf", "scale=360:-2", out], timeout=60)
+                                "-frames:v", "1", "-vf", (rv + "," if rv else "") + "scale=360:-2", out],
+                               timeout=60)
         except Exception:
             raise HTTPException(500)
         if not os.path.exists(out):
             raise HTTPException(500)
     return FileResponse(out, headers={"Cache-Control": "max-age=604800"})
+
+
+class RotateReq(BaseModel):
+    deg: int
+
+
+@app.post("/api/media/{mid}/rotate")
+def rotate(mid: int, req: RotateReq):
+    """Elle yön düzeltmesi (saat yönünde 0/90/180/270). Orijinal dosyaya dokunulmaz."""
+    deg = req.deg % 360
+    if deg not in (0, 90, 180, 270):
+        raise HTTPException(400, "Geçersiz açı")
+    with db.db() as con:
+        con.execute("UPDATE media SET rotate_fix=? WHERE id=?", (deg, mid))
+    return {"rot": deg}
 
 
 @app.get("/api/media/{mid}")

@@ -21,7 +21,9 @@ CREATE TABLE IF NOT EXISTS media (
     sharp REAL,                  -- netlik puanı (yüksek = net)
     dhash TEXT,                  -- görsel iz (foto: 256 bit, video: 3 kare)
     analyzed INTEGER DEFAULT 0,
-    highlights TEXT,             -- uzun videolar için en iyi an analizi (JSON)
+    highlights TEXT,
+    rotate_fix INTEGER,          -- elle verilen yön düzeltmesi (saat yönü, derece)
+    auto_rot INTEGER,            -- otomatik bulunan yön düzeltmesi (NULL = henüz bakılmadı)
     dup_of INTEGER               -- başka bir dosyanın kopyasıysa asıl dosyanın id'si
 );
 CREATE INDEX IF NOT EXISTS idx_media_taken ON media(taken_at);
@@ -58,7 +60,8 @@ def init():
         con.executescript(SCHEMA)
         cols = {r["name"] for r in con.execute("PRAGMA table_info(media)")}
         for name, typ in (("sharp", "REAL"), ("dhash", "TEXT"), ("analyzed", "INTEGER DEFAULT 0"),
-                          ("dup_of", "INTEGER"), ("highlights", "TEXT")):
+                          ("dup_of", "INTEGER"), ("highlights", "TEXT"),
+                          ("rotate_fix", "INTEGER"), ("auto_rot", "INTEGER")):
             if name not in cols:
                 con.execute(f"ALTER TABLE media ADD COLUMN {name} {typ}")
         # Eski sürümün 64 bitlik izleri ve analiz edilmemiş videolar yeniden analiz edilir

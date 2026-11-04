@@ -16,6 +16,9 @@ Fotoğraf ve video arşivini, uğraşmadan kaliteli bir filme çeviren ev sunucu
    - Müziğin ritmine göre kesme
    - Renk stilleri: Sade, Sinematik, Enerjik
    - İsteğe bağlı sinema bantları
+   - Titreyen videolar sabitlenir (vidstab), fotoğraf hareketleri alt-piksel hassasiyetle titremesiz
+   - Yan/ters kaydedilmiş videolar: yüzlere bakılarak otomatik ya da önizlemede ↻ ile elle döndürme
+   - Dikey, kare ve 4:3 videolar tam ekran: yüzü ve hareketi takip eden akıllı kırpma, kameraman gibi yumuşak hareket
    - iPhone HDR renk düzeltmesi
    - Açılış, bölüm ve kapanış başlıkları
 7. **Ses:** Müzik sırayla ve geçişli çalar. Videoda konuşma olduğunda müzik otomatik kısılır. Videoların sesi eşitlenir ve uğultu filtrelenir.
