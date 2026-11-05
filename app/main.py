@@ -1,4 +1,6 @@
 import os
+import time
+import threading
 import subprocess
 
 from fastapi import FastAPI, HTTPException
@@ -512,9 +514,19 @@ class IdsReq(BaseModel):
 @app.post("/api/library/trash")
 def library_trash(req: IdsReq):
     """Galeride seçilen dosyaları çöp kutusuna taşır (elle). Geri alınabilir."""
-    if cleaner.state["running"]:
-        raise HTTPException(400, "Önce süren işlemin bitmesini bekle")
-    return {"trashed": cleaner.trash_ids(req.ids, "elle seçildi")}
+    # Arka planda: çok dosya seçilince tarayıcı beklemesin; süren bir iş varsa o bitince yapılır
+    ids = list(req.ids)
+
+    def go():
+        while cleaner.state["running"]:
+            time.sleep(5)
+        try:
+            n = cleaner.trash_ids(ids, "elle seçildi")
+            print(f"Galeriden çöpe taşındı: {n}", flush=True)
+        except Exception:
+            traceback.print_exc()
+    threading.Thread(target=go, daemon=True).start()
+    return {"queued": len(ids), "waiting": bool(cleaner.state["running"])}
 
 
 @app.get("/api/library/years")

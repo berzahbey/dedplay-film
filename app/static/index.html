@@ -374,7 +374,11 @@ $('#libSelMode').onclick=()=>{lib.selMode=!lib.selMode;$('#libSelBar').classList
 $('#libAll').onclick=()=>{lib.items.forEach(i=>lib.sel.add(i.id));libSel()};
 $('#libNone').onclick=()=>{lib.sel.clear();libSel()};
 $('#libTrash').onclick=async()=>{if(!confirm(`${fmt(lib.sel.size)} dosya çöp kutusuna taşınsın mı? (Çöp kutusundan geri alabilirsin)`))return;
-  try{const r=await post('/api/library/trash',{ids:[...lib.sel]});alert(fmt(r.trashed)+' dosya çöp kutusuna taşındı');buildLib();status()}catch(e){alert('Hata: '+e.message)}};
+  try{const ids=[...lib.sel];const r=await post('/api/library/trash',{ids});
+    ids.forEach(id=>document.querySelectorAll(`#libSections .th[data-id="${id}"]`).forEach(t=>t.remove()));
+    lib.sel.clear();libSel();
+    alert(`${fmt(r.queued)} dosya çöp kutusuna taşınıyor`+(r.waiting?' (süren iş bitince)':'')+'. Bir iki dakika içinde Çöp kutusunda görünür.');
+    setTimeout(()=>{buildLib();status()},8000)}catch(e){alert('Hata: '+e.message)}};
 // sekme değişince sağ çubuk sadece galeride görünsün
 const _railFix=()=>$('#rail').classList.toggle('hide',$('#v-lib').classList.contains('hide'));
 new MutationObserver(_railFix).observe($('#v-lib'),{attributes:true});
