@@ -61,23 +61,35 @@ def quick_hash(path):
 # ---------- Kalite: yüzler ve açık gözler ----------
 
 def _eyes(args):
+    """Yüz kalitesi: yüz sayısı, gözü açık yüz, gülümseyen yüz, yüzlerin netliği, pozlama."""
     mid, path = args
     try:
         import cv2
         import numpy as np
         from .analyze import load_image
-        im = np.asarray(load_image(path, 1000).convert("L"))
-        fc = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
-        ec = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_eye.xml")
-        faces = fc.detectMultiScale(im, 1.1, 6, minSize=(40, 40))
-        open_eyes = 0
-        for (x, y, w, h) in faces[:8]:
-            roi = im[y:y + h // 2 + h // 8, x:x + w]
-            if len(ec.detectMultiScale(roi, 1.1, 6, minSize=(max(8, w // 10), max(8, w // 10)))) >= 2:
+        im = np.asarray(load_image(path, 1200).convert("L"))
+        hc = cv2.data.haarcascades
+        fc = cv2.CascadeClassifier(hc + "haarcascade_frontalface_default.xml")
+        ec = cv2.CascadeClassifier(hc + "haarcascade_eye_tree_eyeglasses.xml")
+        sc = cv2.CascadeClassifier(hc + "haarcascade_smile.xml")
+        faces = fc.detectMultiScale(im, 1.1, 6, minSize=(48, 48))
+        open_eyes = smiles = 0
+        fsh = []
+        for (x, y, w, h) in sorted(faces, key=lambda f: -f[2] * f[3])[:6]:
+            face = im[y:y + h, x:x + w]
+            top = face[: int(h * 0.6)]
+            if len(ec.detectMultiScale(top, 1.1, 5, minSize=(max(8, w // 9), max(8, w // 9)))) >= 2:
                 open_eyes += 1
-        return mid, len(faces), open_eyes
+            low = face[int(h * 0.55):]
+            if len(sc.detectMultiScale(low, 1.5, 18, minSize=(max(10, w // 4), max(6, h // 10)))):
+                smiles += 1
+            fsh.append(float(cv2.Laplacian(face, cv2.CV_64F).var()))
+        mean = float(im.mean())
+        clip = float(((im < 8) | (im > 247)).mean())
+        expo = abs(mean - 120) / 120 + 3 * clip          # 0 = iyi pozlama
+        return mid, len(faces), open_eyes, smiles, (sum(fsh) / len(fsh) if fsh else None), round(expo, 3)
     except Exception:
-        return mid, 0, 0
+        return mid, 0, 0, 0, None, None
 
 
 def score(r):
@@ -90,7 +102,12 @@ def score(r):
     if r["kind"] == "photo":
         s += 1.5 * math.log10((r["sharp"] or 0) + 1)
         faces, eyes = r.get("faces") or 0, r.get("eyes") or 0
-        s += 0.7 * min(eyes, 4) - 0.5 * max(0, faces - eyes)           # gözü kapalı/kaymış yüz cezası
+        s += 0.8 * min(eyes, 4) - 0.6 * max(0, faces - eyes)           # gözü kapalı/kaymış yüz cezası
+        s += 0.5 * min(r.get("smiles") or 0, 4)                         # gülümseyen yüzler
+        if r.get("fsharp"):
+            s += 1.0 * math.log10(r["fsharp"] + 1)                       # yüzler net mi
+        if r.get("expo") is not None:
+            s -= 1.5 * r["expo"]                                         # karanlık / patlamış kareler
     else:
         s += 1.5 * math.log2((r["duration"] or 0) + 1)                 # kırpılmamış (uzun) olan
     if any(b in name for b in BAD_NAMES):
@@ -133,13 +150,14 @@ def find(include_bursts=True):
     return True
 
 
-def _find(include_bursts, keep_running=False):
+def _find(include_bursts, keep_running=False, include_similar=True):
     try:
         with db.db() as con:
             rows = [dict(r) for r in con.execute(
                 "SELECT m.id,m.path,m.folder,m.kind,m.size,m.taken_at,m.date_source,m.width,m.height,"
-                "m.duration,m.sharp,m.dhash,m.qhash,m.faces,m.eyes,(p.path IS NOT NULL) AS pinned "
-                "FROM media m LEFT JOIN pins p ON p.path=m.path")]
+                "m.duration,m.sharp,m.dhash,m.qhash,m.faces,m.eyes,m.smiles,m.fsharp,m.expo,m.q_done,"
+                "(p.path IS NOT NULL) AS pinned "
+                "FROM media m LEFT JOIN pins p ON p.path=m.path WHERE m.live_of IS NULL")]  # canlı foto videoları fotoğrafıyla gider
         rows = [r for r in rows if os.path.exists(r["path"])]
         # 1) birebir kopyalar için hızlı iz (sadece boyutu başka bir dosyayla aynı olanlar)
         by_size = defaultdict(list)
@@ -183,6 +201,16 @@ def _find(include_bursts, keep_running=False):
                     reason.setdefault(r["id"], "seri çekim")
                     reason.setdefault(root, "seri çekim")
 
+        if include_similar:
+            _set(phase="Benzer kareler aranıyor (yapay görü: aynı sahne, farklı poz)", todo=0, done=0)
+            from .scene import find_groups
+            photos = [r for r in rows if r["kind"] == "photo"]
+            for g in find_groups(photos, lambda d, t: state.update(done=d, todo=t)):
+                for x in g[1:]:
+                    uf.union(g[0], x)
+                for x in g:
+                    reason.setdefault(x, "benzer kare")
+
         by_id = {r["id"]: r for r in rows}
         groups = defaultdict(list)
         for i in reason:
@@ -190,20 +218,21 @@ def _find(include_bursts, keep_running=False):
         groups = [g for g in groups.values() if len(g) > 1]
 
         # 2) seri çekim gruplarında yüz / açık göz analizi (en güzel kareyi seçmek için)
-        need = [r for g in groups for r in g if r["kind"] == "photo" and r["faces"] is None
-                and any(reason[x["id"]] == "seri çekim" for x in g)]
+        need = [r for g in groups for r in g if r["kind"] == "photo" and not r["q_done"]
+                and any(reason[x["id"]] in ("seri çekim", "benzer kare") for x in g)]
         if need:
-            _set(phase="Seri çekimlerde yüzler ve gözler inceleniyor", todo=len(need), done=0)
+            _set(phase="En güzel kare seçiliyor: yüzler, açık gözler, gülümseme, netlik", todo=len(need), done=0)
             workers = max(1, (os.cpu_count() or 2) // 2)
             res = []
             with ProcessPoolExecutor(workers) as ex:
                 for out in ex.map(_eyes, [(r["id"], r["path"]) for r in need], chunksize=4):
                     res.append(out)
                     state["done"] += 1
-            for mid, f, e in res:
-                by_id[mid]["faces"], by_id[mid]["eyes"] = f, e
+            for mid, f, e, sm, fs, ex in res:
+                by_id[mid].update(faces=f, eyes=e, smiles=sm, fsharp=fs, expo=ex)
             with db.db() as con:
-                con.executemany("UPDATE media SET faces=?, eyes=? WHERE id=?", [(f, e, m) for m, f, e in res])
+                con.executemany("UPDATE media SET faces=?, eyes=?, smiles=?, fsharp=?, expo=?, q_done=1 WHERE id=?",
+                                [(f, e, sm, fs, ex, m) for m, f, e, sm, fs, ex in res])
 
         from .organize import abs_dir, protected_dirs, settings
         prot = protected_dirs()
@@ -222,7 +251,8 @@ def _find(include_bursts, keep_running=False):
             out.append({
                 "gid": gi, "kind": g[0]["kind"],
                 "reason": "birebir aynı" if reasons == {"birebir aynı"} else
-                          ("seri çekim" if "seri çekim" in reasons else "aynı görüntü"),
+                          ("aynı görüntü" if "aynı görüntü" in reasons or "birebir aynı" in reasons else
+                           ("seri çekim" if "seri çekim" in reasons else "benzer kare")),
                 "keep": g[0]["id"], "skip": False,
                 "members": [{"id": r["id"], "path": r["path"], "name": os.path.basename(r["path"]),
                              "folder": os.path.relpath(r["folder"], archive_root()), "size": r["size"],
@@ -259,7 +289,7 @@ def load_groups():
 def summary(groups=None):
     groups = load_groups() if groups is None else groups
     s = {"groups": 0, "files": 0, "bytes": 0, "photos": 0, "videos": 0,
-         "by_reason": {"birebir aynı": 0, "aynı görüntü": 0, "seri çekim": 0}}
+         "by_reason": {"birebir aynı": 0, "aynı görüntü": 0, "seri çekim": 0, "benzer kare": 0}}
     for g in groups:
         if g["skip"]:
             continue
@@ -350,6 +380,14 @@ def _apply(keep_running=False):
                 rel = m["path"].lstrip("/")
             dst = _move(m["path"], os.path.join(TRASH_DIR, batch, rel))
             extras = []
+            with db.db() as con:  # canlı fotoğrafın video parçası fotoğrafla birlikte çöpe gider
+                lives = [dict(x) for x in con.execute("SELECT id, path FROM media WHERE live_of=?", (m["id"],))]
+            for lv in lives:
+                if os.path.isfile(lv["path"]):
+                    ldst = _move(lv["path"], os.path.join(TRASH_DIR, batch, os.path.relpath(lv["path"], root)))
+                    extras.append([lv["path"], ldst])
+                    with db.db() as con:
+                        con.execute("DELETE FROM media WHERE id=?", (lv["id"],))
             for sc in _sidecars(m["path"]):
                 try:
                     sdst = _move(sc, os.path.join(TRASH_DIR, batch, os.path.relpath(sc, root)))

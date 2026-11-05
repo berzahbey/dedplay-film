@@ -182,6 +182,7 @@ def _source_pass():
         try:
             out = subprocess.run(["exiftool", "-json", "-fast", "-q", "-q", "-charset", "filename=utf8",
                                   "-Make", "-Model", "-Software", "-UserComment", "-AndroidMake", "-AndroidModel",
+                                  "-ContentIdentifier", "-MediaGroupUUID",
                                   "-@", argfile], capture_output=True, timeout=900).stdout
             meta = {m["SourceFile"]: m for m in json.loads(out or b"[]")}
         except Exception:
@@ -195,10 +196,47 @@ def _source_pass():
             r["model"] = str(m.get("Model") or m.get("AndroidModel") or "")[:60]
             r["software"] = str(m.get("Software") or "")[:80]
             r["ucomment"] = str(m.get("UserComment") or "")[:80]
-            upd.append((r["make"], r["model"], r["software"], r["ucomment"], classify(r), r["id"]))
+            live = m.get("ContentIdentifier") or m.get("MediaGroupUUID")
+            upd.append((r["make"], r["model"], r["software"], r["ucomment"], classify(r),
+                        str(live) if live else None, r["id"]))
         with db.db() as con:
-            con.executemany("UPDATE media SET make=?,model=?,software=?,ucomment=?,src=?,src_checked=1 WHERE id=?", upd)
+            con.executemany("UPDATE media SET make=?,model=?,software=?,ucomment=?,src=?,live_id=?,src_checked=1 "
+                            "WHERE id=?", upd)
         state["done"] += len(part)
+
+
+def link_live():
+    """Canlı fotoğrafların (Live Photo) 2-3 sn'lik video parçalarını fotoğraflarına bağlar.
+    Önce Apple'ın ortak kimliğine (ContentIdentifier), yoksa aynı ad + yakın zamana bakılır."""
+    with db.db() as con:
+        photos = [dict(r) for r in con.execute("SELECT id,path,folder,taken_at,live_id FROM media WHERE kind='photo'")]
+        vids = [dict(r) for r in con.execute(
+            "SELECT id,path,folder,taken_at,live_id,duration FROM media WHERE kind='video' AND "
+            "(duration IS NULL OR duration <= 6)")]
+    by_live = {p["live_id"]: p["id"] for p in photos if p["live_id"]}
+    stem = lambda p: os.path.splitext(os.path.basename(p))[0].lower()
+    by_folder = {(p["folder"], stem(p["path"])): p for p in photos}
+    by_stem = {}
+    for p in photos:
+        by_stem.setdefault(stem(p["path"]), []).append(p)
+    links = []
+    for v in vids:
+        pid = by_live.get(v["live_id"]) if v["live_id"] else None
+        if pid is None and (v["duration"] or 0) <= 4.5:
+            p = by_folder.get((v["folder"], stem(v["path"])))
+            if p is None:
+                for c in by_stem.get(stem(v["path"]), []):
+                    try:
+                        if abs((datetime.fromisoformat(c["taken_at"]) - datetime.fromisoformat(v["taken_at"])).total_seconds()) <= 3:
+                            p = c
+                            break
+                    except (TypeError, ValueError):
+                        pass
+            pid = p["id"] if p else None
+        links.append((pid, v["id"]))
+    with db.db() as con:
+        con.executemany("UPDATE media SET live_of=? WHERE id=?", links)
+        con.execute("UPDATE media SET src=NULL WHERE live_of IS NOT NULL")
 
 
 def dedupe_all():
@@ -303,6 +341,7 @@ def _scan(roots=None):
                                         [(b, a, mid) for mid, b, a in res])
                     state["done"] += len(part)
         _source_pass()
+        link_live()
         state["phase"] = "Kopyalar ayıklanıyor"
         dedupe_all()
         state["phase"] = "Tamamlandı"

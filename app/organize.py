@@ -29,6 +29,8 @@ DEFAULTS = {
     "other_dir": "Ekran ve Kaydedilenler",
     "protected": ["video/kenan dugun", "video/Necla video", "Photos/muzaffer resim"],
     "include_bursts": True,
+    "include_similar": True,
+    "live_mode": "keep",     # canlı fotoğraf videoları: keep = fotoğrafın yanında, trash = çöpe
     "auto": False,          # ilk büyük temizlikten sonra açılır
     "last_full": None,
 }
@@ -130,7 +132,10 @@ def organize_files(batch):
     s = settings()
     prot = protected_dirs(s)
     with db.db() as con:
-        rows = [dict(r) for r in con.execute("SELECT id,path,folder,kind,taken_at,date_source,src FROM media")]
+        rows = [dict(r) for r in con.execute(
+            "SELECT id,path,folder,kind,taken_at,date_source,src,live_of FROM media")]
+    lives = [r for r in rows if r["live_of"]]
+    rows = [r for r in rows if not r["live_of"]]
     todo = []
     for r in rows:
         if is_protected(r["path"], prot) or not os.path.isfile(r["path"]):
@@ -160,8 +165,45 @@ def organize_files(batch):
         except Exception:
             traceback.print_exc()
         state["done"] += 1
+    moved += _place_live(lives, s, prot, batch)
     _remove_empty_dirs(prot, s)
     return moved
+
+
+def _place_live(lives, s, prot, batch):
+    """Canlı fotoğraf videoları: fotoğrafla aynı klasöre, aynı adla (ya da ayara göre çöpe)."""
+    n = 0
+    with db.db() as con:
+        photos = {r["id"]: dict(r) for r in con.execute("SELECT id, path FROM media WHERE kind='photo'")}
+    for v in lives:
+        p = photos.get(v["live_of"])
+        if not p or not os.path.isfile(v["path"]) or is_protected(v["path"], prot):
+            continue
+        try:
+            if s["live_mode"] == "trash" and cleaner.TRASH_DIR:
+                dst = cleaner._move(v["path"], os.path.join(cleaner.TRASH_DIR, batch,
+                                                            os.path.relpath(v["path"], root())))
+                with db.db() as con:
+                    con.execute("INSERT INTO trash(media_id,kind,orig_path,trash_path,size,taken_at,reason,"
+                                "keeper_path,extras,batch) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                                (v["id"], "video", v["path"], dst, os.path.getsize(dst), v["taken_at"],
+                                 "canlı fotoğraf videosu", p["path"], "[]", batch))
+                    con.execute("DELETE FROM media WHERE id=?", (v["id"],))
+                n += 1
+                continue
+            want = os.path.splitext(p["path"])[0] + os.path.splitext(v["path"])[1]
+            if v["path"] == want:
+                continue
+            dst = want if not os.path.exists(want) else _free_name(os.path.dirname(want), os.path.basename(want))
+            _mv(v["path"], dst)
+            with db.db() as con:
+                con.execute("UPDATE media SET path=?, folder=? WHERE id=?", (dst, os.path.dirname(dst), v["id"]))
+                con.execute("INSERT INTO moves(media_id,src,dst,extras,batch) VALUES(?,?,?,?,?)",
+                            (v["id"], v["path"], dst, "[]", batch))
+            n += 1
+        except Exception:
+            traceback.print_exc()
+    return n
 
 
 def _remove_empty_dirs(prot, s):
@@ -253,7 +295,7 @@ def _run(full, apply_trash, scope):
         state["phase"] = "Arşiv taranıyor"
         scanner.scan_now(None if full else scope)
         state["phase"] = "Kopyalar aranıyor"
-        cleaner._find(s["include_bursts"], keep_running=True)
+        cleaner._find(s["include_bursts"], keep_running=True, include_similar=s["include_similar"])
         if apply_trash:
             cleaner._apply(keep_running=True)
             organize_files(batch)

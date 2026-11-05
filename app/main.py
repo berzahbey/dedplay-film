@@ -299,11 +299,12 @@ def clean_status():
 
 class FindReq(BaseModel):
     include_bursts: bool = True
+    include_similar: bool = True
 
 
 @app.post("/api/clean/find")
 def clean_find(req: FindReq):
-    organize.save_settings(include_bursts=req.include_bursts)
+    organize.save_settings(include_bursts=req.include_bursts, include_similar=req.include_similar)
     return {"started": organize.run(full=True, apply_trash=False)}
 
 
@@ -352,6 +353,7 @@ def get_settings():
 
 class SettingsReq(BaseModel):
     protected: list[str] | None = None
+    live_mode: str | None = None
     auto: bool | None = None
     include_bursts: bool | None = None
 
@@ -445,8 +447,8 @@ def trash_file(tid: int):
 def _lib_where(kind):
     # kind: photo | video | other (ekran görüntüleri ve başka yerden kaydedilenler)
     if kind == "other":
-        return "src IS NOT NULL", []
-    return "kind=? AND src IS NULL", [kind]
+        return "src IS NOT NULL AND live_of IS NULL", []
+    return "kind=? AND src IS NULL AND live_of IS NULL", [kind]   # canlı foto videoları fotoğrafın parçası
 
 
 @app.get("/api/library/years")

@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS moves (
     at TEXT DEFAULT (datetime('now','localtime')), undone INTEGER DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS pins (path TEXT PRIMARY KEY);
+CREATE TABLE IF NOT EXISTS scene_pairs (a INTEGER, b INTEGER, inl INTEGER, ratio REAL, PRIMARY KEY(a, b));
 CREATE TABLE IF NOT EXISTS jobs (
     id INTEGER PRIMARY KEY,
     title TEXT, status TEXT, progress REAL DEFAULT 0, message TEXT,
@@ -79,7 +80,9 @@ def init():
                           ("meta_rot", "INTEGER"), ("qhash", "TEXT"), ("faces", "INTEGER"),
                           ("eyes", "INTEGER"), ("pinned", "INTEGER"), ("make", "TEXT"),
                           ("model", "TEXT"), ("software", "TEXT"), ("ucomment", "TEXT"),
-                          ("src_checked", "INTEGER"), ("src", "TEXT")):
+                          ("src_checked", "INTEGER"), ("src", "TEXT"), ("smiles", "INTEGER"),
+                          ("fsharp", "REAL"), ("expo", "REAL"), ("q_done", "INTEGER"),
+                          ("live_id", "TEXT"), ("live_of", "INTEGER")):
             if name not in cols:
                 con.execute(f"ALTER TABLE media ADD COLUMN {name} {typ}")
         # Eski sürümün 64 bitlik izleri ve analiz edilmemiş videolar yeniden analiz edilir
@@ -89,6 +92,8 @@ def init():
         # Önceki sürümün otomatik yön kararları gevşekti (yapraklarda yanlış yüz bulabiliyordu): yeniden bak
         if "meta_rot" not in cols:
             con.execute("UPDATE media SET auto_rot=NULL WHERE kind='video'")
+        if "live_id" not in cols:  # canlı fotoğraf kimliği için kaynak bilgisini yeniden oku
+            con.execute("UPDATE media SET src_checked=NULL")
         # Klasör bağlantıları değiştiyse kayıtlı yolları güncelle (yeniden tarama gerekmez)
         from .config import PATH_MIGRATE
         for old, new in PATH_MIGRATE:

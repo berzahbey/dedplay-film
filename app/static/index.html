@@ -85,7 +85,8 @@ button.ghost.red{color:var(--bad);border-color:#5a2226}
     <div class="row" style="margin-top:14px">
       <button class="btn" id="findBtn">1 · Kopyaları bul</button>
       <button class="ghost" id="inboxBtn" title="Gelen klasöründeki yeni dosyaları beklemeden işle">Gelen klasörünü şimdi işle</button>
-      <label class="row muted"><input type="checkbox" id="bursts" checked> Seri çekimleri de say (art arda çekilmiş neredeyse aynı kareler)</label>
+      <label class="row muted"><input type="checkbox" id="bursts" checked> Seri çekimler</label>
+      <label class="row muted"><input type="checkbox" id="similar" checked> Benzer kareler (aynı yerde birkaç dakika içinde çekilmiş, pozu biraz farklı fotoğraflar — en güzeli kalır)</label>
     </div>
     <div id="prog" class="hide" style="margin-top:14px"><div id="progTxt" class="muted"></div><div class="bar"><i id="progBar" style="width:0"></i></div></div>
   </div>
@@ -158,6 +159,12 @@ button.ghost.red{color:var(--bad);border-color:#5a2226}
     <div class="row" style="margin-top:12px"><button class="btn" id="saveProt">Kaydet</button><span class="muted" id="saveInfo"></span></div>
   </div>
   <div class="card">
+    <h2>Canlı fotoğraf videoları</h2>
+    <div class="muted">iPhone "Canlı" (Live) fotoğraflarda her resmin yanında 2-3 saniyelik bir video parçası olur. Bunlar gerçek video değildir; Tüm videolar listesinde gösterilmez.</div>
+    <label class="row" style="margin-top:10px"><input type="radio" name="live" value="keep"> Fotoğrafın yanında kalsın (aynı klasör, aynı ad — iPhone'a geri aktarınca canlı fotoğraf olarak çalışır)</label>
+    <label class="row"><input type="radio" name="live" value="trash"> Çöp kutusuna atılsın (yer açar, fotoğraf kalır)</label>
+  </div>
+  <div class="card">
     <h2>Otomatik düzen</h2>
     <label class="row"><input type="checkbox" id="auto"> Gelen klasörünü sürekli işle (5 dakikada bir) ve 6 saatte bir tüm arşive bak</label>
     <div class="muted" id="autoInfo" style="margin-top:8px"></div>
@@ -189,7 +196,7 @@ async function status(){
   const s=ST.settings, run=ST.running;
   $('#pill').textContent=run?`⏳ ${ST.phase}`:(s.auto?'Otomatik düzen açık':'Otomatik düzen kapalı');
   $('#trashN').textContent=ST.trash.files?`(${fmt(ST.trash.files)})`:'';
-  $('#howto').innerHTML=`Program tüm arşivi tarar. Birebir aynı dosyaları, farklı ad/boyuttaki aynı görüntüleri${$('#bursts').checked?' ve seri çekimleri':''} bulur ve her grupta <b>en iyisini</b> bırakır (gerçek çekim tarihi, en yüksek çözünürlük, en net, gözleri açık olan). Diğerleri <b>çöp kutusuna</b> gider. Sonra kalan her şey <b>${s.photos_dir}/&lt;yıl&gt;</b> ve <b>${s.videos_dir}/&lt;yıl&gt;</b> klasörlerine yerleşir. Ekran görüntüleri, ekran kayıtları ve WhatsApp/Instagram/TikTok/TV gibi başka yerlerden kaydedilenler ayrıca <b>${s.other_dir}</b> klasörüne gider.<br>Olduğu gibi kalacak klasörler: <b>${s.protected.join(', ')||'yok'}</b> (Ayarlar'dan değiştir). Yeni dosyaları <b>${s.inbox}</b> klasörüne at; otomatik işlenir.`;
+  $('#howto').innerHTML=`Program tüm arşivi tarar. Birebir aynı dosyaları, farklı ad/boyuttaki aynı görüntüleri${$('#bursts').checked?' ve seri çekimleri':''}${$('#similar')?.checked?', ayrıca aynı yerde birkaç dakika içinde çekilmiş benzer kareleri':''} bulur ve her grupta <b>en iyisini</b> bırakır (gerçek çekim tarihi, en yüksek çözünürlük, en net, gözleri açık olan). Diğerleri <b>çöp kutusuna</b> gider. Sonra kalan her şey <b>${s.photos_dir}/&lt;yıl&gt;</b> ve <b>${s.videos_dir}/&lt;yıl&gt;</b> klasörlerine yerleşir. Ekran görüntüleri, ekran kayıtları ve WhatsApp/Instagram/TikTok/TV gibi başka yerlerden kaydedilenler ayrıca <b>${s.other_dir}</b> klasörüne gider.<br>Olduğu gibi kalacak klasörler: <b>${s.protected.join(', ')||'yok'}</b> (Ayarlar'dan değiştir). Yeni dosyaları <b>${s.inbox}</b> klasörüne at; otomatik işlenir.`;
   $('#findBtn').disabled=$('#inboxBtn').disabled=run;$('#applyBtn').disabled=run||!ST.summary.files;
   $('#prog').classList.toggle('hide',!run&&!ST.error);
   const pct=ST.todo?Math.round(ST.done/ST.todo*100):0;
@@ -209,10 +216,11 @@ function drawSummary(){
     <div class="stat"><b>${fmt(m.photos)} / ${fmt(m.videos)}</b><span>fotoğraf / video</span></div>
     <div class="stat"><b>${fmt(m.by_reason['birebir aynı'])}</b><span>birebir aynı</span></div>
     <div class="stat"><b>${fmt(m.by_reason['aynı görüntü'])}</b><span>aynı görüntü, farklı boyut/ad</span></div>
-    <div class="stat"><b>${fmt(m.by_reason['seri çekim'])}</b><span>seri çekim</span></div>`;
+    <div class="stat"><b>${fmt(m.by_reason['seri çekim'])}</b><span>seri çekim</span></div>
+    <div class="stat"><b>${fmt(m.by_reason['benzer kare'])}</b><span>benzer kare (farklı poz)</span></div>`;
 }
 $('#inboxBtn').onclick=async()=>{await post('/api/clean/inbox');status()};
-$('#findBtn').onclick=async()=>{await post('/api/clean/find',{include_bursts:$('#bursts').checked});status()};
+$('#findBtn').onclick=async()=>{await post('/api/clean/find',{include_bursts:$('#bursts').checked,include_similar:$('#similar').checked});status()};
 $('#applyBtn').onclick=async()=>{const m=ST.summary;
   if(!confirm(`${fmt(m.files)} dosya (${gb(m.bytes)}) çöp kutusuna taşınacak ve kalanlar Resimler/Videolar klasörlerine yerleştirilecek.\n\nÇöp kutusundan her zaman geri alabilirsin. Devam edilsin mi?`))return;
   await post('/api/clean/apply');status()};
@@ -222,7 +230,7 @@ let gOff=0, gReason='';
 async function loadGroups(reset){
   if(reset){gOff=0;$('#groups').innerHTML=''}
   const r=await api(`/api/clean/groups?offset=${gOff}&limit=30${gReason?'&reason='+encodeURIComponent(gReason):''}`);
-  $('#reasonChips').innerHTML=['','birebir aynı','aynı görüntü','seri çekim'].map(x=>`<button class="chip ${x==gReason?'on':''}" data-r="${x}">${x||'Hepsi'}</button>`).join('');
+  $('#reasonChips').innerHTML=['','birebir aynı','aynı görüntü','seri çekim','benzer kare'].map(x=>`<button class="chip ${x==gReason?'on':''}" data-r="${x}">${x||'Hepsi'}</button>`).join('');
   $('#groups').insertAdjacentHTML('beforeend',r.groups.map(groupHtml).join(''));
   gOff+=r.groups.length;$('#moreGroups').classList.toggle('hide',gOff>=r.total);
 }
@@ -313,11 +321,12 @@ $('#tDeleteAll').onclick=async()=>{const what=T.batch?`"${T.batch}" turundaki`:'
 async function loadSettings(){const r=await api('/api/settings');
   $('#folders').innerHTML=r.folders.length?r.folders.map(f=>`<label><input type="checkbox" value="${f.path}" ${f.protected?'checked':''}><span style="flex:1">${f.path}</span><span class="muted">${fmt(f.count)} dosya</span></label>`).join(''):'<div class="muted">Önce arşivi tara.</div>';
   $('#auto').checked=r.settings.auto;
+  document.querySelectorAll('input[name=live]').forEach(i=>{i.checked=i.value==r.settings.live_mode;i.onchange=()=>post('/api/settings',{live_mode:i.value})});
   $('#autoInfo').textContent=`Yeni dosyaları ${r.settings.inbox} klasörüne (/DATA/Media/${r.settings.inbox}) at. Kopyaysa çöpe, değilse ${r.settings.photos_dir}/<yıl> veya ${r.settings.videos_dir}/<yıl> klasörüne taşınır. İlk büyük temizlikten sonra kendiliğinden açılır.`}
 $('#saveProt').onclick=async()=>{const p=[...document.querySelectorAll('#folders input:checked')].map(i=>i.value);
   await post('/api/settings',{protected:p});$('#saveInfo').textContent='Kaydedildi. Sonraki "Kopyaları bul" bu ayarla çalışır.';status()};
 $('#auto').onchange=async e=>{await post('/api/settings',{auto:e.target.checked});status()};
-$('#bursts').onchange=()=>status();
+$('#bursts').onchange=()=>status();$('#similar').onchange=()=>status();
 
 status();loadGroups(true);loadMoves();setInterval(status,3000);
 </script>
