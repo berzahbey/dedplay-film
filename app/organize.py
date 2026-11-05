@@ -475,17 +475,35 @@ def _watch():
             traceback.print_exc()
 
 
+def _old_left():
+    s = settings()
+    return any(os.path.isdir(abs_dir(OLD_LAYOUT[k])) and abs_dir(OLD_LAYOUT[k]) != abs_dir(s[k])
+               for k in ("photos_dir", "videos_dir"))
+
+
 def _migrate_soon():
-    """Eski Resimler/Videolar klasörlerinde dosya kaldıysa (otomatik düzen açıkken) birazdan yerine taşı."""
-    time.sleep(120)
-    try:
-        s = settings()
-        left = any(os.path.isdir(abs_dir(OLD_LAYOUT[k])) and abs_dir(OLD_LAYOUT[k]) != abs_dir(s[k])
-                   for k in ("photos_dir", "videos_dir"))
-        if left and s["auto"] and not state["running"] and not scanner.state["running"]:
-            run(full=True)
-    except Exception:
-        traceback.print_exc()
+    """Eski Resimler/Videolar klasörlerinde dosya kaldıysa, süren iş bitince doğrudan yerine taşı
+    (kopya taraması beklenmez; sadece taşıma — dakikalar sürer)."""
+    time.sleep(30)
+    while _old_left():
+        try:
+            with _lock:
+                busy = state["running"] or scanner.state["running"]
+                if not busy:
+                    state.update(running=True, phase="Photos ve video klasörlerine taşınıyor", done=0, todo=0,
+                                 error=None, kind="run")
+            if busy:
+                time.sleep(30)
+                continue
+            try:
+                organize_files(datetime.now().strftime("%Y-%m-%d %H.%M") + " Yeni klasör düzeni")
+                state["phase"] = "Tamamlandı"
+            finally:
+                state.update(running=False, finished=time.time())
+            break
+        except Exception:
+            traceback.print_exc()
+            break
 
 
 try:
