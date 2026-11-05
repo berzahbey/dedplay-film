@@ -58,6 +58,12 @@ button.ghost.red{color:var(--bad);border-color:#5a2226}
 .lb .nv{position:fixed;top:50%;font-size:40px;background:none;border:0;color:#fff;cursor:pointer;padding:20px}
 .lb .cap{position:fixed;bottom:14px;left:0;right:0;text-align:center;color:#ccd;font-size:13px}
 .flist label{display:flex;gap:10px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--line)}
+.rail{position:fixed;right:10px;top:150px;bottom:20px;width:70px;display:flex;flex-direction:column;gap:2px;overflow-y:auto;z-index:15;scrollbar-width:none}
+.rail button{background:none;border:0;color:var(--mu);font:inherit;font-size:13px;text-align:right;padding:4px 8px;border-radius:6px;cursor:pointer}
+.rail button:hover{background:var(--line);color:var(--tx)}.rail button.on{color:var(--ac);font-weight:700}
+.ysec{margin-top:18px}.ysec h3{margin:0 0 8px;font-size:18px;position:sticky;top:150px;background:var(--card);padding:6px 0;z-index:5}
+.ysec h3 small{color:var(--mu);font-weight:400;font-size:13px}
+@media (max-width:700px){.rail{width:52px;right:2px}.card[style*="padding-right:90px"]{padding-right:56px!important}}
 .sticky{position:sticky;top:70px;z-index:10;background:var(--card);padding:10px 0;margin:-10px 0 6px}
 </style>
 </head>
@@ -115,9 +121,8 @@ button.ghost.red{color:var(--bad);border-color:#5a2226}
 
 <!-- ============ KÜTÜPHANE ============ -->
 <section id="v-lib" class="hide">
-  <div class="card">
+  <div class="card" style="padding-right:90px">
     <h2 id="libTitle"></h2>
-    <div class="chips" id="years"></div>
     <div class="sticky">
       <div class="row">
         <span class="muted" id="libInfo"></span>
@@ -126,16 +131,16 @@ button.ghost.red{color:var(--bad);border-color:#5a2226}
         <button class="ghost" id="libSelMode">☑ Seçerek çöpe at</button>
       </div>
       <div class="row hide" id="libSelBar" style="margin-top:8px">
-        <button class="ghost" id="libAll">Görünenlerin hepsini seç</button>
+        <button class="ghost" id="libAll">Yüklenenlerin hepsini seç</button>
         <button class="ghost" id="libNone">Seçimi kaldır</button>
         <span class="muted" id="libSelN">0 seçili</span>
         <span style="flex:1"></span>
         <button class="btn red" id="libTrash" disabled>Seçilenleri çöp kutusuna at</button>
       </div>
     </div>
-    <div class="grid" id="libGrid"></div>
-    <div class="row" style="margin-top:12px"><button class="ghost" id="libMore">Daha fazla</button></div>
+    <div id="libSections"></div>
   </div>
+  <nav class="rail" id="rail"></nav>
 </section>
 
 <!-- ============ ÇÖP ============ -->
@@ -268,38 +273,70 @@ async function loadMoves(){const r=await api('/api/moves');
 $('#moves').onclick=async e=>{const b=e.target.dataset.undo;if(!b)return;if(!confirm('Bu turda taşınan dosyalar eski klasörlerine geri dönsün mü? (Çöpe atılanlar için Çöp kutusunu kullan)'))return;
   const r=await post('/api/moves/undo',{batch:b});alert(fmt(r.undone)+' dosya eski yerine döndü');loadMoves()};
 
-// ---- kütüphane
-let lib={kind:'photo',year:null,off:0,items:[]};
-async function openLib(kind){lib={kind,year:null,off:0,items:[],sel:new Set(),selMode:false};
+// ---- kütüphane: yıllara göre sonsuz kaydırma + sağda yıl çubuğu
+let lib={kind:'photo',years:[],sec:{},items:[],sel:new Set(),selMode:false};
+const TILE=136;  // yaklaşık kare boyu (yer tutucu yüksekliği için)
+let secObs=null, moreObs=null, railObs=null;
+async function openLib(kind){
+  lib={kind,years:[],sec:{},items:[],sel:new Set(),selMode:false};
   $('#libSelBar').classList.add('hide');$('#libSelMode').textContent='☑ Seçerek çöpe at';
   $('#shortWrap').classList.toggle('hide',kind=='photo');if(kind=='photo')$('#libShort').checked=false;
   $('#libTitle').textContent={photo:'Tüm resimler',video:'Tüm videolar',other:'Ekran görüntüleri, ekran kayıtları ve başka yerlerden kaydedilenler'}[kind];
-  const ys=await api('/api/library/years?kind='+kind);
-  $('#years').innerHTML=`<button class="chip on" data-y="">Hepsi (${fmt(ys.reduce((a,y)=>a+y.n,0))})</button>`+ys.map(y=>`<button class="chip" data-y="${y.y}">${y.y} (${fmt(y.n)})</button>`).join('');
-  loadLib(true)}
-$('#years').onclick=e=>{const y=e.target.dataset.y;if(y===undefined)return;lib.year=y||null;
-  document.querySelectorAll('#years .chip').forEach(c=>c.classList.toggle('on',c===e.target));loadLib(true)};
-async function loadLib(reset){if(reset){lib.off=0;lib.items=[];lib.sel=new Set();$('#libGrid').innerHTML='';libSel()}
-  const sh=$('#libShort').checked&&lib.kind!='photo'?'&short=1':'';
-  const r=await api(`/api/library?kind=${lib.kind}&offset=${lib.off}&limit=${sh?500:120}${sh}${lib.year?'&year='+encodeURIComponent(lib.year):''}`);
-  const start=lib.items.length;lib.items.push(...r.items);lib.off+=r.items.length;
-  $('#libInfo').textContent=`${fmt(r.total)} ${{photo:'resim',video:'video',other:'dosya'}[lib.kind]}`;
-  $('#libGrid').insertAdjacentHTML('beforeend',r.items.map((i,k)=>`<div class="th" data-i="${start+k}" data-id="${i.id}" title="${i.folder}/${i.name}\n${i.taken_at}"><img loading="lazy" src="/api/thumb/${i.id}">${i.duration?`<span class="b">▶ ${Math.round(i.duration)} sn</span>`:''}${i.has_photo===undefined?'':`<span class="b" style="left:auto;right:5px;top:5px;bottom:auto;background:${i.has_photo?'#163d2b':'#2a2214'}">${i.has_photo?'📷 fotoğrafı var':'📷 karesi kaydedilecek'}</span>`}</div>`).join(''));
-  if(sh)$('#libInfo').textContent+=` · "fotoğrafı var" olanların aynısı arşivde resim olarak duruyor; "karesi kaydedilecek" olanların en net karesi çöpe atılmadan önce fotoğraf olarak saklanır`;
-  $('#libMore').classList.toggle('hide',lib.off>=r.total)}
-$('#libMore').onclick=()=>loadLib(false);
-$('#libGrid').onclick=e=>{const t=e.target.closest('.th');if(!t)return;
+  await buildLib()}
+function shortQ(){return $('#libShort').checked&&lib.kind!='photo'?'&short=1':''}
+async function buildLib(){
+  [secObs,moreObs,railObs].forEach(o=>o&&o.disconnect());
+  const ys=await api(`/api/library/years?kind=${lib.kind}${shortQ()}`);
+  // en yeni yıl en üstte, tarihsizler en sonda
+  lib.years=ys.filter(y=>y.y!='Tarihsiz').sort((a,b)=>b.y.localeCompare(a.y)).concat(ys.filter(y=>y.y=='Tarihsiz'));
+  const tot=lib.years.reduce((a,y)=>a+y.n,0);
+  $('#libInfo').textContent=`${fmt(tot)} ${{photo:'resim',video:'video',other:'dosya'}[lib.kind]}`+(shortQ()?' · "fotoğrafı var" olanların aynısı arşivde resim olarak duruyor; "karesi kaydedilecek" olanların en net karesi çöpe atılmadan önce fotoğraf olarak saklanır':'');
+  const W=$('#libSections').clientWidth||900, cols=Math.max(1,Math.floor((W+6)/(130+6))), tile=(W-(cols-1)*6)/cols+6;
+  $('#libSections').innerHTML=lib.years.map(y=>`<div class="ysec" id="y-${y.y}" data-y="${y.y}"><h3>${y.y} <small>${fmt(y.n)}</small></h3><div class="grid" style="min-height:${Math.ceil(y.n/cols)*tile}px"></div><div class="more" style="height:1px"></div></div>`).join('');
+  $('#rail').innerHTML=lib.years.map(y=>`<button data-y="${y.y}">${y.y}</button>`).join('');
+  lib.sec={};lib.years.forEach(y=>lib.sec[y.y]={off:0,total:y.n,loading:false});
+  lib.items=[];
+  // bölüm görünür olunca ilk partisini yükle; bölüm sonuna yaklaşınca devamını
+  secObs=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting)loadSec(e.target.dataset.y)}),{rootMargin:'800px 0px'});
+  moreObs=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting)loadSec(e.target.parentElement.dataset.y)}),{rootMargin:'1200px 0px'});
+  railObs=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting&&Date.now()>railLock){const y=e.target.parentElement.dataset.y;
+    document.querySelectorAll('#rail button').forEach(b=>b.classList.toggle('on',b.dataset.y==y))}}),{rootMargin:'-160px 0px -70% 0px'});
+  document.querySelectorAll('#libSections .ysec').forEach(el=>{secObs.observe(el);moreObs.observe(el.querySelector('.more'));railObs.observe(el.querySelector('h3'))});
+  libSel()}
+async function loadSec(y){const st=lib.sec[y];if(!st||st.loading||st.off>=st.total)return;st.loading=true;
+  try{const r=await api(`/api/library?kind=${lib.kind}&year=${encodeURIComponent(y)}&offset=${st.off}&limit=150${shortQ()}`);
+    const el=document.getElementById('y-'+y),grid=el.querySelector('.grid');
+    const start=lib.items.length;lib.items.push(...r.items);st.off+=r.items.length;st.total=r.total;
+    grid.insertAdjacentHTML('beforeend',r.items.map((i,k)=>`<div class="th" data-i="${start+k}" data-id="${i.id}" title="${i.folder}/${i.name}\n${i.taken_at||''}"><img loading="lazy" src="/api/thumb/${i.id}">${i.duration?`<span class="b">▶ ${Math.round(i.duration)} sn</span>`:''}${i.has_photo===undefined?'':`<span class="b" style="left:auto;right:5px;top:5px;bottom:auto;background:${i.has_photo?'#163d2b':'#2a2214'}">${i.has_photo?'📷 fotoğrafı var':'📷 karesi kaydedilecek'}</span>`}</div>`).join(''));
+    if(st.off>=st.total)grid.style.minHeight='';
+    libSel()}
+  finally{st.loading=false}
+  // ekranda hâlâ boşluk varsa devam et
+  const m=document.getElementById('y-'+y)?.querySelector('.more');
+  if(m&&m.getBoundingClientRect().top<innerHeight+1200&&st.off<st.total)loadSec(y)}
+let railLock=0;
+$('#rail').onclick=e=>{const y=e.target.dataset.y;if(!y)return;const el=document.getElementById('y-'+y);
+  document.querySelectorAll('#rail button').forEach(b=>b.classList.toggle('on',b.dataset.y==y));
+  railLock=Date.now()+1500;
+  const go=()=>window.scrollTo({top:el.getBoundingClientRect().top+scrollY-150});
+  go();loadSec(y);setTimeout(go,350);setTimeout(go,900)};  // üstteki bölümler yüklenince kayma olmasın
+$('#libSections').onclick=e=>{const t=e.target.closest('.th');if(!t)return;
   if(lib.selMode){const id=+t.dataset.id;lib.sel.has(id)?lib.sel.delete(id):lib.sel.add(id);libSel();return}
-  lightbox(lib.items,+t.dataset.i,i=>'/api/media/'+i.id,lib.kind)};
-function libSel(){if(!lib.sel)lib.sel=new Set();$('#libSelN').textContent=`${fmt(lib.sel.size)} seçili`;$('#libTrash').disabled=!lib.sel.size;
-  document.querySelectorAll('#libGrid .th').forEach(t=>t.classList.toggle('sel',lib.sel.has(+t.dataset.id)))}
+  // büyük görüntülemede o yılın yüklenmiş tüm kareleri arasında gezilir
+  const grid=t.parentElement,ids=[...grid.children].map(x=>+x.dataset.i),items=ids.map(i=>lib.items[i]);
+  lightbox(items,ids.indexOf(+t.dataset.i),i=>'/api/media/'+i.id,lib.kind)};
+function libSel(){$('#libSelN').textContent=`${fmt(lib.sel.size)} seçili`;$('#libTrash').disabled=!lib.sel.size;
+  document.querySelectorAll('#libSections .th').forEach(t=>t.classList.toggle('sel',lib.sel.has(+t.dataset.id)))}
 $('#libSelMode').onclick=()=>{lib.selMode=!lib.selMode;$('#libSelBar').classList.toggle('hide',!lib.selMode);
   $('#libSelMode').textContent=lib.selMode?'✕ Seçimi bitir':'☑ Seçerek çöpe at';if(!lib.selMode){lib.sel.clear();libSel()}};
 $('#libAll').onclick=()=>{lib.items.forEach(i=>lib.sel.add(i.id));libSel()};
 $('#libNone').onclick=()=>{lib.sel.clear();libSel()};
-$('#libShort').onchange=()=>loadLib(true);
+$('#libShort').onchange=()=>buildLib();
 $('#libTrash').onclick=async()=>{if(!confirm(`${fmt(lib.sel.size)} dosya çöp kutusuna taşınsın mı? (Çöp kutusundan geri alabilirsin)`))return;
-  try{const r=await post('/api/library/trash',{ids:[...lib.sel]});alert(fmt(r.trashed)+' dosya çöp kutusuna taşındı');loadLib(true);status()}catch(e){alert('Hata: '+e.message)}};
+  try{const r=await post('/api/library/trash',{ids:[...lib.sel]});alert(fmt(r.trashed)+' dosya çöp kutusuna taşındı');buildLib();status()}catch(e){alert('Hata: '+e.message)}};
+// sekme değişince sağ çubuk sadece galeride görünsün
+const _railFix=()=>$('#rail').classList.toggle('hide',$('#v-lib').classList.contains('hide'));
+new MutationObserver(_railFix).observe($('#v-lib'),{attributes:true});
 
 // ---- büyük görüntüleme
 let LB=null;
