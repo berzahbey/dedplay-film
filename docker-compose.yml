@@ -8,8 +8,10 @@ services:
     environment:
       - TZ=Europe/Amsterdam
       # Tüm Media klasörü TEK bağlama noktası: taşımalar (çöp kutusu, düzenleme) anında olur
-      - MEDIA_DIRS=/archive/Photos,/archive/video,/archive/Arşiv,/archive/Resimler,/archive/Videolar,/archive/Ekran ve Kaydedilenler,/archive/Gelen
-      - TRASH_DIR=/archive/Arşiv/Dedplay Çöp Kutusu
+      - MEDIA_DIRS=/archive/Photos,/archive/video,/archive/Arsiv,/archive/Arşiv,/archive/Resimler,/archive/Videolar,/archive/Ekran ve Kaydedilenler,/archive/Gelen
+      - TRASH_DIR=/archive/Arsiv/Dedplay Cop Kutusu
+      # ZimaOS iPhone yedeği: yüklenmesi biten dosyalar Arsiv/Gelen'e taşınır ve işlenir
+      - INBOX_FEEDS=/backup/iPhone 14 Plus
       # Eski sürümün kayıtlı yolları (yeniden tarama gerekmesin)
       - PATH_MIGRATE=/media/photos=/archive/Photos,/media/videos=/archive/video
       # Film (deneysel) bölümü için
@@ -20,6 +22,8 @@ services:
       # Yazma izinli: kopyalar çöp kutusuna taşınır, kalanlar Resimler/Videolar'a yerleşir.
       # Kalıcı silme sadece arayüzdeki "kalıcı sil" ile olur.
       - /DATA/Media:/archive
+      # ZimaOS client yedekleri (yalnızca INBOX_FEEDS'teki klasörlere dokunulur)
+      - /DATA/Backup:/backup
       # Veritabanı, küçük resimler, ayarlar
       - /DATA/AppData/dedplay-film:/app/data
     restart: unless-stopped

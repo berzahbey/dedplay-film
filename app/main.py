@@ -329,6 +329,7 @@ def clean_inbox():
     s = organize.settings()
     inbox = organize.abs_dir(s["inbox"])
     os.makedirs(inbox, exist_ok=True)
+    organize.feed_pass(quiet=30)
     return {"started": organize.run(full=False, scope=[inbox])}
 
 
