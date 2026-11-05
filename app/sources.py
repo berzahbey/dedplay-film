@@ -49,10 +49,11 @@ def classify(r):
         if dims in {_norm(a, b) for a, b in SCREENS} and not CAMERA_NAME.search(low):
             return "ekran"
         return None
-    # Video: kamera bilgisi yok ve kamera tarzı bir adı da yoksa başka yerden gelmiştir
-    if not CAMERA_NAME.search(low) and r.get("lat") is None:
-        return "kaydedilen"
+    # Video: aksiyon kameraları, araç kameraları ve bazı Android telefonlar kamera bilgisi yazmaz.
+    # Bu yüzden videoyu sadece adı açıkça belli ediyorsa (yukarıdaki kurallar) ayırırız; yoksa kendi çekimidir.
     return None
 
+
+VERSION = 2  # kurallar değişince kayıtlı dosyalar yeniden sınıflandırılır
 
 LABEL = {"ekran": "Ekran görüntüsü / kaydı", "kaydedilen": "Başka yerden kaydedilen"}

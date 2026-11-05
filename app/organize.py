@@ -174,10 +174,10 @@ def organize_files(batch):
 
 
 def _trash_short(rows, prot, batch):
-    """Fotoğrafına bağlanamayan, 3 saniyeden kısa video parçalarını çöpe atar."""
+    """Fotoğrafına bağlanamayan, 4 saniyeden kısa video parçalarını çöpe atar."""
     keep = []
     for r in rows:
-        if (r["kind"] == "video" and r["duration"] is not None and r["duration"] < 3
+        if (r["kind"] == "video" and r["duration"] is not None and r["duration"] < 4
                 and not is_protected(r["path"], prot) and os.path.isfile(r["path"])):
             try:
                 dst = cleaner._move(r["path"], os.path.join(cleaner.TRASH_DIR, batch, os.path.relpath(r["path"], root())))

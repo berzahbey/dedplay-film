@@ -421,6 +421,40 @@ def _apply(keep_running=False, batch=None):
             _set(running=False, finished=time.time())
 
 
+def trash_ids(ids, reason):
+    """Seçilen dosyaları (ve varsa canlı foto videosu / yan dosyalarını) çöp kutusuna taşır."""
+    if not TRASH_DIR or not ids:
+        return 0
+    batch = datetime.now().strftime("%Y-%m-%d %H.%M") + " Elle"
+    root = archive_root()
+    with db.db() as con:
+        rows = [dict(r) for r in con.execute(
+            f"SELECT id,kind,path,size,taken_at FROM media WHERE id IN ({','.join('?' * len(ids))})", list(ids))]
+    n = 0
+    for m in rows:
+        if not os.path.isfile(m["path"]):
+            continue
+        dst = _move(m["path"], os.path.join(TRASH_DIR, batch, os.path.relpath(m["path"], root)))
+        extras = []
+        with db.db() as con:
+            lives = [dict(x) for x in con.execute("SELECT id, path FROM media WHERE live_of=?", (m["id"],))]
+        for lv in lives:
+            if os.path.isfile(lv["path"]):
+                extras.append([lv["path"], _move(lv["path"], os.path.join(TRASH_DIR, batch, os.path.relpath(lv["path"], root)))])
+                with db.db() as con:
+                    con.execute("DELETE FROM media WHERE id=?", (lv["id"],))
+        for sc in _sidecars(m["path"]):
+            extras.append([sc, _move(sc, os.path.join(TRASH_DIR, batch, os.path.relpath(sc, root)))])
+        with db.db() as con:
+            con.execute("INSERT INTO trash(media_id,kind,orig_path,trash_path,size,taken_at,reason,keeper_path,"
+                        "extras,batch) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                        (m["id"], m["kind"], m["path"], dst, m["size"], m["taken_at"], reason, "",
+                         json.dumps(extras), batch))
+            con.execute("DELETE FROM media WHERE id=?", (m["id"],))
+        n += 1
+    return n
+
+
 def restore(ids=None, batch=None):
     """Çöpteki dosyaları eski yerlerine geri taşır. Dönüş: geri alınan sayısı."""
     q = "SELECT * FROM trash WHERE status='çöpte'"

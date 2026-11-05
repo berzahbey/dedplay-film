@@ -300,7 +300,7 @@ def clean_status():
     with db.db() as con:
         st["live"] = con.execute("SELECT COUNT(*) FROM media WHERE live_of IS NOT NULL").fetchone()[0]
         st["short"] = con.execute("SELECT COUNT(*) FROM media WHERE kind='video' AND live_of IS NULL "
-                                  "AND duration < 3").fetchone()[0]
+                                  "AND duration < 4").fetchone()[0]
     return st
 
 
@@ -459,9 +459,23 @@ def _lib_where(kind):
     return "kind=? AND src IS NULL AND live_of IS NULL", [kind]   # canlı foto videoları fotoğrafın parçası
 
 
+class IdsReq(BaseModel):
+    ids: list[int]
+
+
+@app.post("/api/library/trash")
+def library_trash(req: IdsReq):
+    """Galeride seçilen dosyaları çöp kutusuna taşır (elle). Geri alınabilir."""
+    if cleaner.state["running"]:
+        raise HTTPException(400, "Önce süren işlemin bitmesini bekle")
+    return {"trashed": cleaner.trash_ids(req.ids, "elle seçildi")}
+
+
 @app.get("/api/library/years")
-def library_years(kind: str = "photo"):
+def library_years(kind: str = "photo", short: int = 0):
     w, a = _lib_where(kind)
+    if short:
+        w += " AND kind='video' AND (duration IS NULL OR duration < 4)"
     with db.db() as con:
         rows = con.execute("SELECT CASE WHEN date_source IN ('exif','google','filename') THEN substr(taken_at,1,4) "
                            f"ELSE 'Tarihsiz' END y, COUNT(*) n FROM media WHERE {w} GROUP BY y ORDER BY y DESC",
@@ -470,8 +484,11 @@ def library_years(kind: str = "photo"):
 
 
 @app.get("/api/library")
-def library(kind: str = "photo", year: str | None = None, offset: int = 0, limit: int = 120):
+def library(kind: str = "photo", year: str | None = None, offset: int = 0, limit: int = 120,
+            short: int = 0):
     w, args = _lib_where(kind)
+    if short:  # çok kısa videolar (4 sn'den kısa ya da süresi okunamamış) — hangi klasörde olursa olsun
+        w, args = "kind='video' AND live_of IS NULL AND (duration IS NULL OR duration < 4)", []
     q = f"SELECT id, path, taken_at, duration, width, height, kind FROM media WHERE {w}"
     if year == "Tarihsiz":
         q += " AND (date_source NOT IN ('exif','google','filename') OR date_source IS NULL)"

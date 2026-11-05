@@ -167,7 +167,15 @@ def _orient_item(args):
 
 def _source_pass():
     """Kamera bilgisi (Make/Model) ve ekran görüntüsü işaretleri → kaynak türü (ekran / kaydedilen / kamera)."""
-    from .sources import classify
+    from .sources import VERSION, classify
+    # Kurallar güncellendiyse daha önce okunmuş bilgilerle yeniden sınıflandır (dosya okumadan, hızlı)
+    with db.db() as con:
+        old = [dict(r) for r in con.execute(
+            "SELECT id,path,kind,width,height,lat,make,model,software,ucomment FROM media "
+            "WHERE src_checked IS NOT NULL AND src_checked < ?", (VERSION,))]
+        con.executemany("UPDATE media SET src=?, src_checked=? WHERE id=?",
+                        [(classify(r), VERSION, r["id"]) for r in old])
+        con.execute("UPDATE media SET src=NULL WHERE live_of IS NOT NULL")
     with db.db() as con:
         rows = [dict(r) for r in con.execute(
             "SELECT id,path,kind,width,height,lat FROM media WHERE src_checked IS NULL")]
@@ -201,7 +209,7 @@ def _source_pass():
             upd.append((r["make"], r["model"], r["software"], r["ucomment"], classify(r),
                         str(live) if live else None, r["id"]))
         with db.db() as con:
-            con.executemany("UPDATE media SET make=?,model=?,software=?,ucomment=?,src=?,live_id=?,src_checked=1 "
+            con.executemany(f"UPDATE media SET make=?,model=?,software=?,ucomment=?,src=?,live_id=?,src_checked={VERSION} "
                             "WHERE id=?", upd)
         state["done"] += len(part)
 
