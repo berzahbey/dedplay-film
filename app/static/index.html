@@ -61,6 +61,7 @@ button.ghost.red{color:var(--bad);border-color:#5a2226}
 .pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:14px}
 .pc{text-align:center;cursor:pointer;position:relative}.pc img{width:110px;height:110px;border-radius:50%;object-fit:cover;border:3px solid var(--line);display:block;margin:0 auto 6px}
 .pc:hover img{border-color:var(--ac)}.pc b{display:block;font-size:14px}.pc small{color:var(--mu)}
+.th .fc{position:absolute;right:4px;bottom:4px;width:34%;aspect-ratio:1;border-radius:50%;border:2px solid #fff;object-fit:cover;box-shadow:0 1px 4px #000a}
 .pc.sel img{border-color:var(--sel)}.pc.sel::after{content:"✓";position:absolute;left:calc(50% + 30px);top:4px;background:var(--sel);color:#fff;border-radius:50%;width:24px;height:24px;display:grid;place-items:center}
 .rail{position:fixed;right:8px;top:130px;bottom:12px;width:70px;display:flex;flex-direction:column;gap:0;overflow-y:auto;z-index:15;scrollbar-width:thin}
 .rail button{background:none;border:0;color:var(--mu);font:inherit;font-size:12px;line-height:1.2;text-align:right;padding:3px 8px;border-radius:6px;cursor:pointer;flex:0 0 auto}
@@ -166,9 +167,11 @@ button.ghost.red{color:var(--bad);border-color:#5a2226}
       <input id="pplName" placeholder="İsim ver (ör. Kenan)" style="flex:1;min-width:200px;font-size:17px">
       <button class="btn" id="pplSave">Kaydet</button>
       <button class="ghost red" id="pplHide" title="Bu kişiyi listede gösterme">Gizle</button></div>
-    <div class="muted" id="pplOneInfo" style="margin:10px 0"></div>
+    <div class="row" style="margin:10px 0"><span class="muted" id="pplOneInfo" style="flex:1"></span>
+      <button class="ghost" id="pplPick">✕ Bu kişi olmayanları seç</button>
+      <button class="btn red hide" id="pplRemove">Seçilenleri bu kişiden çıkar</button></div>
     <div class="grid" id="pplPhotos"></div>
-    <div class="row" style="margin-top:12px"><button class="ghost" id="pplMore">Daha fazla</button></div>
+    <div id="pplMore" style="height:40px"></div>
   </div>
 </section>
 
@@ -392,16 +395,26 @@ $('#pplMerge').onclick=async()=>{if(PP.sel.size<2)return alert('Birleştirmek i�
 $('#pplGrid').onclick=e=>{const c=e.target.closest('.pc');if(!c)return;const id=+c.dataset.p;
   if(PP.merge){PP.sel.has(id)?PP.sel.delete(id):PP.sel.add(id);c.classList.toggle('sel');return}
   openPerson(id)};
-async function openPerson(id){PP.cur=id;PP.off=0;PP.items=[];$('#pplPhotos').innerHTML='';
+async function openPerson(id){PP.cur=id;PP.off=0;PP.items=[];$('#pplPhotos').innerHTML='';PP.pick=false;PP.rm=new Set();pickUi();
   $('#pplList').classList.add('hide');$('#pplOne').classList.remove('hide');window.scrollTo(0,0);await morePerson()}
 async function morePerson(){const r=await api(`/api/people/${PP.cur}/photos?offset=${PP.off}&limit=200`);
   if(!PP.off)$('#pplName').value=r.person?.name||'';
   const start=PP.items.length;PP.items.push(...r.items);PP.off+=r.items.length;
   $('#pplOneInfo').textContent=`${fmt(r.total)} fotoğraf`;
-  $('#pplPhotos').insertAdjacentHTML('beforeend',r.items.map((i,k)=>`<div class="th" data-i="${start+k}" title="${i.folder}/${i.name}\n${i.taken_at||''}"><img loading="lazy" src="/api/thumb/${i.id}"></div>`).join(''));
-  $('#pplMore').classList.toggle('hide',PP.off>=r.total)}
-$('#pplMore').onclick=morePerson;
-$('#pplPhotos').onclick=e=>{const t=e.target.closest('.th');if(t)lightbox(PP.items,+t.dataset.i,i=>'/api/media/'+i.id,'photo')};
+  $('#pplPhotos').insertAdjacentHTML('beforeend',r.items.map((i,k)=>`<div class="th" data-i="${start+k}" title="${i.folder}/${i.name}\n${i.taken_at||''}"><img loading="lazy" src="/api/thumb/${i.id}">${i.fid?`<img class="fc" loading="lazy" src="/api/face/${i.fid}/thumb">`:''}</div>`).join(''));
+  PP.total=r.total;PP.busy=false}
+new IntersectionObserver(es=>{if(es[0].isIntersecting&&PP.cur&&!PP.busy&&PP.off<(PP.total||0)){PP.busy=true;morePerson()}},{rootMargin:'600px'}).observe($('#pplMore'));
+function pickUi(){$('#pplPick').textContent=PP.pick?'Vazgeç':'✕ Bu kişi olmayanları seç';
+  $('#pplRemove').classList.toggle('hide',!PP.pick);$('#pplRemove').textContent=`Seçilenleri bu kişiden çıkar (${PP.rm.size})`;
+  $('#pplRemove').disabled=!PP.rm.size;if(!PP.pick)document.querySelectorAll('#pplPhotos .th.sel').forEach(t=>t.classList.remove('sel'))}
+$('#pplPick').onclick=()=>{PP.pick=!PP.pick;PP.rm.clear();pickUi()};
+$('#pplRemove').onclick=async()=>{if(!PP.rm.size)return;await post(`/api/people/${PP.cur}/remove`,{ids:[...PP.rm]});
+  const ids=PP.rm;PP.items=PP.items.filter(i=>!ids.has(i.id));document.querySelectorAll('#pplPhotos .th.sel').forEach(t=>t.remove());
+  PP.off-=ids.size;PP.total-=ids.size;PP.pick=false;PP.rm=new Set();pickUi();
+  document.querySelectorAll('#pplPhotos .th').forEach((t,k)=>t.dataset.i=k);$('#pplOneInfo').textContent=`${fmt(PP.total)} fotoğraf`};
+$('#pplPhotos').onclick=e=>{const t=e.target.closest('.th');if(!t)return;
+  if(PP.pick){const id=PP.items[+t.dataset.i].id;PP.rm.has(id)?PP.rm.delete(id):PP.rm.add(id);t.classList.toggle('sel');pickUi();return}
+  lightbox(PP.items,+t.dataset.i,i=>'/api/media/'+i.id,'photo')};
 $('#pplBack').onclick=()=>{PP.cur=null;$('#pplOne').classList.add('hide');$('#pplList').classList.remove('hide');loadPeople()};
 $('#pplSave').onclick=async()=>{await post('/api/people/'+PP.cur,{name:$('#pplName').value});$('#pplBack').click()};
 $('#pplName').onkeydown=e=>{if(e.key=='Enter')$('#pplSave').click()};

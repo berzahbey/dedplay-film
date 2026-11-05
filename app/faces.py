@@ -115,6 +115,9 @@ def cluster(progress=None):
         people = [dict(r) for r in con.execute("SELECT id FROM people")]
         known = con.execute("SELECT person_id, emb FROM faces WHERE person_id IS NOT NULL").fetchall()
         new = con.execute("SELECT id, emb FROM faces WHERE person_id IS NULL ORDER BY id").fetchall()
+        rej = {}
+        for r in con.execute("SELECT face_id, person_id FROM face_reject"):
+            rej.setdefault(r[0], set()).add(r[1])
     if not new:
         return 0
     # kişi merkezleri
@@ -131,11 +134,17 @@ def cluster(progress=None):
         pid = None
         if len(pids):
             d = np.linalg.norm(C - e, axis=1)
-            i = int(d.argmin())
-            if d[i] < CLUSTER_JOIN:
+            no = rej.get(r["id"], ())          # kullanıcı "bu kişi değil" dediyse o kişiye bir daha eklenmez
+            for i in np.argsort(d):
+                i = int(i)
+                if d[i] >= CLUSTER_JOIN:
+                    break
+                if pids[i] in no:
+                    continue
                 pid = pids[i]
                 cnt[pid] += 1
                 C[i] = C[i] + (e - C[i]) / cnt[pid]   # merkezi güncelle
+                break
         if pid is None:
             with db.db() as con:
                 pid = con.execute("INSERT INTO people(name) VALUES(NULL)").lastrowid
@@ -149,7 +158,8 @@ def cluster(progress=None):
         con.executemany("UPDATE faces SET person_id=? WHERE id=?", assign)
         # kapak: kişinin en büyük yüzü
         con.execute("""UPDATE people SET cover=(SELECT f.id FROM faces f WHERE f.person_id=people.id
-                        ORDER BY f.w*f.h DESC LIMIT 1) WHERE cover IS NULL OR cover NOT IN (SELECT id FROM faces)""")
+                        ORDER BY f.w*f.h DESC LIMIT 1) WHERE cover IS NULL OR cover NOT IN
+                        (SELECT id FROM faces f2 WHERE f2.person_id=people.id)""")
     return len(assign)
 
 
@@ -159,7 +169,22 @@ def merge(target, others):
             if o == target:
                 continue
             con.execute("UPDATE faces SET person_id=? WHERE person_id=?", (target, o))
+            con.execute("UPDATE OR IGNORE face_reject SET person_id=? WHERE person_id=?", (target, o))
             con.execute("DELETE FROM people WHERE id=?", (o,))
+
+
+def remove(pid, media_ids):
+    """Seçilen fotoğraflardaki bu kişiye ait yüzleri kişiden çıkarır; başka bir kişiye ya da yeni kişiye gider."""
+    if not media_ids:
+        return 0
+    with db.db() as con:
+        fids = [r[0] for r in con.execute(
+            f"SELECT id FROM faces WHERE person_id=? AND media_id IN ({','.join('?' * len(media_ids))})",
+            [pid, *media_ids])]
+        con.executemany("INSERT OR IGNORE INTO face_reject(face_id, person_id) VALUES(?,?)", [(f, pid) for f in fids])
+        con.executemany("UPDATE faces SET person_id=NULL WHERE id=?", [(f,) for f in fids])
+    cluster()
+    return len(fids)
 
 
 # ---------- Arka planda tüm arşiv ----------

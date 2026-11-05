@@ -547,9 +547,9 @@ def people(include_small: int = 0):
                               WHERE p.hidden=0 GROUP BY p.id ORDER BY (p.name IS NULL), n DESC""").fetchall()
         pend = con.execute("SELECT COUNT(*) FROM media WHERE kind='photo' AND (faces_done IS NULL OR faces_done=-1)").fetchone()[0]
         total = con.execute("SELECT COUNT(*) FROM media WHERE kind='photo'").fetchone()[0]
-    out = [dict(r) for r in rows if include_small or r["n"] >= 3 or r["name"]]
+    out = [dict(r) for r in rows if include_small or r["n"] >= 5 or r["name"]]
     return {"people": out, "pending": pend, "total": total, "state": faces.state,
-            "small": sum(1 for r in rows if r["n"] < 3 and not r["name"])}
+            "small": sum(1 for r in rows if r["n"] < 5 and not r["name"])}
 
 
 @app.post("/api/people/run")
@@ -562,15 +562,25 @@ def person_photos(pid: int, offset: int = 0, limit: int = 200):
     with db.db() as con:
         total = con.execute("SELECT COUNT(DISTINCT f.media_id) FROM faces f JOIN media m ON m.id=f.media_id "
                             "WHERE f.person_id=?", (pid,)).fetchone()[0]
-        rows = con.execute("""SELECT DISTINCT m.id, m.path, m.taken_at FROM faces f JOIN media m ON m.id=f.media_id
-                              WHERE f.person_id=? ORDER BY m.taken_at DESC LIMIT ? OFFSET ?""",
+        rows = con.execute("""SELECT m.id, m.path, m.taken_at, MIN(f.id) fid FROM faces f JOIN media m ON m.id=f.media_id
+                              WHERE f.person_id=? GROUP BY m.id ORDER BY m.taken_at DESC LIMIT ? OFFSET ?""",
                            (pid, limit, offset)).fetchall()
         p = con.execute("SELECT id, name FROM people WHERE id=?", (pid,)).fetchone()
     root = cleaner.archive_root()
     return {"person": dict(p) if p else None, "total": total,
             "items": [{"id": r["id"], "name": os.path.basename(r["path"]), "kind": "photo",
-                       "folder": os.path.relpath(os.path.dirname(r["path"]), root), "taken_at": r["taken_at"]}
+                       "folder": os.path.relpath(os.path.dirname(r["path"]), root), "taken_at": r["taken_at"],
+                       "fid": r["fid"]}
                       for r in rows]}
+
+
+class RemoveReq(BaseModel):
+    ids: list[int]
+
+
+@app.post("/api/people/{pid}/remove")
+def person_remove(pid: int, req: RemoveReq):
+    return {"removed": faces.remove(pid, req.ids)}
 
 
 class PersonReq(BaseModel):

@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS faces (id INTEGER PRIMARY KEY, media_id INTEGER, x RE
                                   emb BLOB, person_id INTEGER);
 CREATE INDEX IF NOT EXISTS idx_faces_media ON faces(media_id);
 CREATE INDEX IF NOT EXISTS idx_faces_person ON faces(person_id);
+CREATE TABLE IF NOT EXISTS face_reject (face_id INTEGER, person_id INTEGER, PRIMARY KEY(face_id, person_id));
 CREATE TABLE IF NOT EXISTS people (id INTEGER PRIMARY KEY, name TEXT, cover INTEGER, hidden INTEGER DEFAULT 0);
 CREATE TABLE IF NOT EXISTS scene_pairs (a INTEGER, b INTEGER, inl INTEGER, ratio REAL, PRIMARY KEY(a, b));
 CREATE TABLE IF NOT EXISTS scene_pairs2 (a INTEGER, b INTEGER, inl INTEGER, area REAL, overlap REAL, diff REAL,
