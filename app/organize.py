@@ -30,6 +30,7 @@ DEFAULTS = {
     "protected": ["video/kenan dugun", "video/Necla video", "Photos/muzaffer resim"],
     "include_bursts": True,
     "include_similar": True,
+    "short_mode": "keep",    # fotoğrafı bulunmayan 3 sn'den kısa videolar: keep | trash
     "live_mode": "keep",     # canlı fotoğraf videoları: keep = fotoğrafın yanında, trash = çöpe
     "auto": False,          # ilk büyük temizlikten sonra açılır
     "last_full": None,
@@ -133,9 +134,11 @@ def organize_files(batch):
     prot = protected_dirs(s)
     with db.db() as con:
         rows = [dict(r) for r in con.execute(
-            "SELECT id,path,folder,kind,taken_at,date_source,src,live_of FROM media")]
+            "SELECT id,path,folder,kind,taken_at,date_source,src,live_of,duration,size FROM media")]
     lives = [r for r in rows if r["live_of"]]
     rows = [r for r in rows if not r["live_of"]]
+    if s.get("short_mode") == "trash" and cleaner.TRASH_DIR:
+        rows = _trash_short(rows, prot, batch)
     todo = []
     for r in rows:
         if is_protected(r["path"], prot) or not os.path.isfile(r["path"]):
@@ -168,6 +171,27 @@ def organize_files(batch):
     moved += _place_live(lives, s, prot, batch)
     _remove_empty_dirs(prot, s)
     return moved
+
+
+def _trash_short(rows, prot, batch):
+    """Fotoğrafına bağlanamayan, 3 saniyeden kısa video parçalarını çöpe atar."""
+    keep = []
+    for r in rows:
+        if (r["kind"] == "video" and r["duration"] is not None and r["duration"] < 3
+                and not is_protected(r["path"], prot) and os.path.isfile(r["path"])):
+            try:
+                dst = cleaner._move(r["path"], os.path.join(cleaner.TRASH_DIR, batch, os.path.relpath(r["path"], root())))
+                with db.db() as con:
+                    con.execute("INSERT INTO trash(media_id,kind,orig_path,trash_path,size,taken_at,reason,"
+                                "keeper_path,extras,batch) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                                (r["id"], "video", r["path"], dst, r["size"], r["taken_at"], "çok kısa video",
+                                 "", "[]", batch))
+                    con.execute("DELETE FROM media WHERE id=?", (r["id"],))
+                continue
+            except Exception:
+                traceback.print_exc()
+        keep.append(r)
+    return keep
 
 
 def _place_live(lives, s, prot, batch):

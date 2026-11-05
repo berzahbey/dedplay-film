@@ -102,9 +102,12 @@ def thumb(mid: int):
                 load_image(r["path"], 360).rotate(-rot, expand=True).save(out, quality=80)
             else:
                 rv = orient.vf_rotate(rot)
-                subprocess.run(["ffmpeg", "-y", "-v", "error", "-ss", "1", "-i", r["path"],
-                                "-frames:v", "1", "-vf", (rv + "," if rv else "") + "scale=360:-2", out],
-                               timeout=60)
+                for ss in ("1", "0"):  # 1 sn'den kısa videolarda baştan dene
+                    subprocess.run(["ffmpeg", "-y", "-v", "error", "-ss", ss, "-i", r["path"],
+                                    "-frames:v", "1", "-vf", (rv + "," if rv else "") + "scale=360:-2", out],
+                                   timeout=60)
+                    if os.path.exists(out) and os.path.getsize(out) > 0:
+                        break
         except Exception:
             raise HTTPException(500)
         if not os.path.exists(out):
@@ -294,6 +297,10 @@ def clean_status():
         t = con.execute("SELECT COUNT(*) n, COALESCE(SUM(size),0) b FROM trash WHERE status='çöpte'").fetchone()
     st["trash"] = {"files": t["n"], "bytes": t["b"]}
     st["scan"] = scanner.state
+    with db.db() as con:
+        st["live"] = con.execute("SELECT COUNT(*) FROM media WHERE live_of IS NOT NULL").fetchone()[0]
+        st["short"] = con.execute("SELECT COUNT(*) FROM media WHERE kind='video' AND live_of IS NULL "
+                                  "AND duration < 3").fetchone()[0]
     return st
 
 
@@ -354,6 +361,7 @@ def get_settings():
 class SettingsReq(BaseModel):
     protected: list[str] | None = None
     live_mode: str | None = None
+    short_mode: str | None = None
     auto: bool | None = None
     include_bursts: bool | None = None
 

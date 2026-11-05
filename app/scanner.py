@@ -111,7 +111,8 @@ def _exiftool(paths):
 def _build_row(path, st, meta):
     kind = _kind(path)
     taken, src, lat, lon = None, None, None, None
-    for t in DATE_TAGS:
+    tags = DATE_TAGS if kind == "photo" else ["CreationDate"] + [t for t in DATE_TAGS if t != "CreationDate"]
+    for t in tags:
         taken = _parse_exif_date(meta.get(t))
         if taken:
             src = "exif"
@@ -205,38 +206,73 @@ def _source_pass():
         state["done"] += len(part)
 
 
+_SUFFIX = re.compile(r"(\s*\(\d+\)|-edited|-düzenlendi)$", re.I)
+
+
+def _stem(p):
+    st = os.path.splitext(os.path.basename(p))[0].lower()
+    return _SUFFIX.sub("", st)
+
+
 def link_live():
-    """Canlı fotoğrafların (Live Photo) 2-3 sn'lik video parçalarını fotoğraflarına bağlar.
-    Önce Apple'ın ortak kimliğine (ContentIdentifier), yoksa aynı ad + yakın zamana bakılır."""
+    """Canlı fotoğrafların (Live Photo) 1-4 sn'lik video parçalarını fotoğraflarına bağlar.
+    Sıra: 1) Apple'ın ortak kimliği (ContentIdentifier)  2) aynı ad (eki "(2)" vb. atılmış) ve
+    ±3 sn içinde çekilmiş  3) adı farklı olsa da aynı saniyede (±1 sn) çekilmiş bir fotoğraf.
+    Klasörleri ayrılmış olsalar bile (Resimler/Videolar) eşleşir."""
+    import bisect
     with db.db() as con:
-        photos = [dict(r) for r in con.execute("SELECT id,path,folder,taken_at,live_id FROM media WHERE kind='photo'")]
+        photos = [dict(r) for r in con.execute(
+            "SELECT id,path,folder,taken_at,live_id FROM media WHERE kind='photo' AND taken_at IS NOT NULL")]
         vids = [dict(r) for r in con.execute(
             "SELECT id,path,folder,taken_at,live_id,duration FROM media WHERE kind='video' AND "
             "(duration IS NULL OR duration <= 6)")]
+
+    def ts(x):
+        try:
+            return datetime.fromisoformat(x).timestamp()
+        except (TypeError, ValueError):
+            return None
+
     by_live = {p["live_id"]: p["id"] for p in photos if p["live_id"]}
-    stem = lambda p: os.path.splitext(os.path.basename(p))[0].lower()
-    by_folder = {(p["folder"], stem(p["path"])): p for p in photos}
+    by_folder = {(p["folder"], _stem(p["path"])): p for p in photos}
+    timeline = sorted(((ts(p["taken_at"]), p) for p in photos if ts(p["taken_at"]) is not None), key=lambda x: x[0])
     by_stem = {}
-    for p in photos:
-        by_stem.setdefault(stem(p["path"]), []).append(p)
+    for t, p in timeline:
+        by_stem.setdefault(_stem(p["path"]), []).append((t, p))
+    times = [t for t, _ in timeline]
     links = []
     for v in vids:
         pid = by_live.get(v["live_id"]) if v["live_id"] else None
         if pid is None and (v["duration"] or 0) <= 4.5:
-            p = by_folder.get((v["folder"], stem(v["path"])))
-            if p is None:
-                for c in by_stem.get(stem(v["path"]), []):
-                    try:
-                        if abs((datetime.fromisoformat(c["taken_at"]) - datetime.fromisoformat(v["taken_at"])).total_seconds()) <= 3:
-                            p = c
-                            break
-                    except (TypeError, ValueError):
-                        pass
-            pid = p["id"] if p else None
+            # aynı klasörde aynı adlı fotoğraf → kesin eşleşme (tarih bilgisi olmasa da)
+            p = by_folder.get((v["folder"], _stem(v["path"])))
+            if p:
+                pid = p["id"]
+        if pid is None and (v["duration"] or 0) <= 4.5:
+            tv = ts(v["taken_at"])
+            if tv is not None:
+                cands = []
+                # aynı ad: saat dilimi farkı olabilir (video UTC'den çevrilmiş, fotoğraf yerel saat) →
+                # tam saat farkları da kabul (seyahatte çekilenler)
+                for t, p in by_stem.get(_stem(v["path"]), []):
+                    d = abs(t - tv)
+                    off = min(d % 3600, 3600 - d % 3600)
+                    if d <= 14 * 3600 + 3 and off <= 3:
+                        cands.append((0, d, p))
+                i = bisect.bisect_left(times, tv - 3)
+                while i < len(times) and times[i] <= tv + 3:
+                    p = timeline[i][1]
+                    dt = abs(times[i] - tv)
+                    if dt <= 1 and _stem(p["path"]) != _stem(v["path"]):
+                        cands.append((1, dt, p))
+                    i += 1
+                if cands:
+                    pid = min(cands, key=lambda c: (c[0], c[1]))[2]["id"]
         links.append((pid, v["id"]))
     with db.db() as con:
         con.executemany("UPDATE media SET live_of=? WHERE id=?", links)
         con.execute("UPDATE media SET src=NULL WHERE live_of IS NOT NULL")
+    return sum(1 for p, _ in links if p)
 
 
 def dedupe_all():
