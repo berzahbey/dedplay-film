@@ -545,7 +545,7 @@ def people(include_small: int = 0):
         rows = con.execute("""SELECT p.id, p.name, p.cover, COUNT(DISTINCT f.media_id) n
                               FROM people p JOIN faces f ON f.person_id=p.id JOIN media m ON m.id=f.media_id
                               WHERE p.hidden=0 GROUP BY p.id ORDER BY (p.name IS NULL), n DESC""").fetchall()
-        pend = con.execute("SELECT COUNT(*) FROM media WHERE kind='photo' AND faces_done IS NULL").fetchone()[0]
+        pend = con.execute("SELECT COUNT(*) FROM media WHERE kind='photo' AND (faces_done IS NULL OR faces_done=-1)").fetchone()[0]
         total = con.execute("SELECT COUNT(*) FROM media WHERE kind='photo'").fetchone()[0]
     out = [dict(r) for r in rows if include_small or r["n"] >= 3 or r["name"]]
     return {"people": out, "pending": pend, "total": total, "state": faces.state,

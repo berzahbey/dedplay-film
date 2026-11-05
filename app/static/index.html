@@ -378,7 +378,7 @@ async function loadPeople(){const r=await api('/api/people'+(PP.small?'?include_
     (r.pending?`${fmt(scanned)} / ${fmt(r.total)} fotoğrafta yüzler tarandı. Kalanlar arka planda taranır (ya da "Yüzleri şimdi tara").`:
      `${fmt(r.people.length)} kişi · tüm fotoğraflar tarandı. Bir kişiye tıkla, isim ver; aynı kişi iki kez çıktıysa "Aynı kişileri birleştir".`);
   $('#pplBarW').classList.toggle('hide',!st.running);$('#pplBar').style.width=(st.todo?st.done/st.todo*100:0)+'%';
-  $('#pplRun').disabled=st.running||!r.pending;
+  $('#pplRun').disabled=!!st.running;
   $('#pplSmall').textContent=PP.small?'Az görünenleri gizle':`Az görünen kişileri de göster (${fmt(r.small)})`;
   $('#pplGrid').innerHTML=r.people.length?r.people.map(p=>`<div class="pc ${PP.sel.has(p.id)?'sel':''}" data-p="${p.id}"><img loading="lazy" src="/api/face/${p.cover}/thumb"><b>${p.name||'İsimsiz'}</b><small>${fmt(p.n)} fotoğraf</small></div>`).join('')
     :'<div class="muted">Henüz kişi yok.</div>';

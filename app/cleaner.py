@@ -211,14 +211,21 @@ def _find(include_bursts, keep_running=False, include_similar=True):
             need = [m for g in scene_groups for m in g]
             with db.db() as con:
                 pend = [(r["id"], r["path"]) for r in con.execute(
-                    f"SELECT id, path FROM media WHERE faces_done IS NULL AND id IN ({','.join('?' * len(need))})", need)] if need else []
+                    f"SELECT id, path FROM media WHERE (faces_done IS NULL OR faces_done=-1) AND id IN ({','.join('?' * len(need))})", need)] if need else []
             if pend:
+                F._load()   # model yüklenemezse taramayı hatayla durdur (yüz kontrolü olmadan benzer kare atılmasın)
                 _set(phase="Benzer karelerde kişiler tanınıyor (yüz tanıma)", todo=len(pend), done=0)
                 F.analyze(pend, lambda d, t: state.update(done=d, todo=t))
             fmap = F.faces_of(need)
+            with db.db() as con:   # yüzlerine bakılamayanlar (hata) hiçbir gruba girmez: emin değilsek dokunma
+                bad = {r[0] for r in con.execute(
+                    f"SELECT id FROM media WHERE (faces_done IS NULL OR faces_done=-1) AND id IN ({','.join('?' * len(need))})",
+                    need)} if need else set()
             for g in scene_groups:
                 subs = []                       # aynı kişileri içeren alt gruplar
                 for x in g:
+                    if x in bad:
+                        continue
                     for sg in subs:
                         if F.same_people(fmap[sg[0]], fmap[x]) is not False:
                             sg.append(x)

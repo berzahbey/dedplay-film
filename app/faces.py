@@ -28,11 +28,14 @@ state = {"running": False, "phase": "", "done": 0, "todo": 0, "error": None}
 def _load():
     global _models
     if _models is None:
+        import importlib.util
         import dlib
-        import face_recognition_models as M
+        # face_recognition_models paketini içe aktarmadan (pkg_resources ister) model dosyalarını bul
+        spec = importlib.util.find_spec("face_recognition_models")
+        mdir = os.path.join(os.path.dirname(spec.origin), "models")
         _models = (dlib.get_frontal_face_detector(),
-                   dlib.shape_predictor(M.pose_predictor_five_point_model_location()),
-                   dlib.face_recognition_model_v1(M.face_recognition_model_location()))
+                   dlib.shape_predictor(os.path.join(mdir, "shape_predictor_5_face_landmarks.dat")),
+                   dlib.face_recognition_model_v1(os.path.join(mdir, "dlib_face_recognition_resnet_model_v1.dat")))
     return _models
 
 
@@ -168,9 +171,11 @@ def run_all():
 
     def go():
         try:
+            _load()   # model yüklenemiyorsa hemen hata göster (sessizce her fotoğrafı atlamasın)
             with db.db() as con:
                 todo = [(r["id"], r["path"]) for r in con.execute(
-                    "SELECT id, path FROM media WHERE kind='photo' AND faces_done IS NULL ORDER BY taken_at DESC")]
+                    "SELECT id, path FROM media WHERE kind='photo' AND (faces_done IS NULL OR faces_done=-1) "
+                    "ORDER BY taken_at DESC")]
             state["todo"] = len(todo)
             # parça parça: her 200 fotoğrafta bir kişiler güncellenir (beklemeden görünsünler)
             for k in range(0, len(todo), 200):
@@ -195,7 +200,7 @@ def _boot():
     time.sleep(90)
     try:
         with db.db() as con:
-            n = con.execute("SELECT COUNT(*) FROM media WHERE kind='photo' AND faces_done IS NULL").fetchone()[0]
+            n = con.execute("SELECT COUNT(*) FROM media WHERE kind='photo' AND (faces_done IS NULL OR faces_done=-1)").fetchone()[0]
         if n:
             run_all()
     except Exception:
