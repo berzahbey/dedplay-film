@@ -585,14 +585,33 @@ def person_update(pid: int, req: PersonReq):
             con.execute("UPDATE people SET name=? WHERE id=?", (req.name.strip() or None, pid))
         if req.hidden is not None:
             con.execute("UPDATE people SET hidden=? WHERE id=?", (1 if req.hidden else 0, pid))
+    _merge_same_names()
     return {"ok": True}
+
+
+def _merge_same_names():
+    """Aynı ismi verilen kişiler tek kişi olur (büyük/küçük harf ve boşluk farkı önemsiz)."""
+    with db.db() as con:
+        rows = con.execute("SELECT id, name FROM people WHERE name IS NOT NULL ORDER BY id").fetchall()
+    by = {}
+    for r in rows:
+        by.setdefault(" ".join(r["name"].split()).casefold(), []).append(r["id"])
+    for ids in by.values():
+        if len(ids) > 1:
+            faces.merge(ids[0], ids[1:])
 
 
 class MergeReq(BaseModel):
     ids: list[int]
 
 
-@app.post("/api/people/merge")
+try:
+    _merge_same_names()
+except Exception:
+    pass
+
+
+@app.post("/api/people-merge")
 def people_merge(req: MergeReq):
     if len(req.ids) < 2:
         raise HTTPException(400, "En az iki kişi seç")

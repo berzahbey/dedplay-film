@@ -388,7 +388,7 @@ $('#pplSmall').onclick=()=>{PP.small=!PP.small;loadPeople()};
 $('#pplMergeMode').onclick=()=>{PP.merge=!PP.merge;PP.sel.clear();$('#pplMerge').classList.toggle('hide',!PP.merge);
   $('#pplMergeMode').textContent=PP.merge?'✕ Vazgeç':'⧉ Aynı kişileri birleştir';loadPeople()};
 $('#pplMerge').onclick=async()=>{if(PP.sel.size<2)return alert('Birleştirmek için aynı kişiye ait en az iki kart seç');
-  await post('/api/people/merge',{ids:[...PP.sel]});PP.sel.clear();PP.merge=false;$('#pplMerge').classList.add('hide');$('#pplMergeMode').textContent='⧉ Aynı kişileri birleştir';loadPeople()};
+  await post('/api/people-merge',{ids:[...PP.sel]});PP.sel.clear();PP.merge=false;$('#pplMerge').classList.add('hide');$('#pplMergeMode').textContent='⧉ Aynı kişileri birleştir';loadPeople()};
 $('#pplGrid').onclick=e=>{const c=e.target.closest('.pc');if(!c)return;const id=+c.dataset.p;
   if(PP.merge){PP.sel.has(id)?PP.sel.delete(id):PP.sel.add(id);c.classList.toggle('sel');return}
   openPerson(id)};
