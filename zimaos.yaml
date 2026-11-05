@@ -60,6 +60,7 @@ x-casaos:
     en_us: Photo & video archive cleaner
   title:
     en_us: Dedplay Arşiv
+  icon: https://raw.githubusercontent.com/berzahbey/dedplay-film/main/icon.png
   index: /
   port_map: "8090"
   scheme: http

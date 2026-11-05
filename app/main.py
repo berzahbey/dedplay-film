@@ -26,6 +26,13 @@ def film_page():
         return f.read()
 
 
+@app.get("/icon.png")
+@app.get("/favicon.ico")
+def icon():
+    return FileResponse(os.path.join(STATIC, "icon.png"), media_type="image/png",
+                        headers={"Cache-Control": "max-age=86400"})
+
+
 # ---------- Arşiv ----------
 
 @app.get("/api/status")
