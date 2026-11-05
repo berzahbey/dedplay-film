@@ -334,7 +334,7 @@ def clean_inbox():
 @app.get("/api/clean/groups")
 def clean_groups(offset: int = 0, limit: int = 40, reason: str | None = None):
     gs = [g for g in cleaner.load_groups()
-          if any(m["id"] != g["keep"] and not m.get("locked") for m in g["members"])]
+          if any(m["id"] not in cleaner.keeps_of(g) and not m.get("locked") for m in g["members"])]
     if reason:
         gs = [g for g in gs if g["reason"] == reason]
     return {"total": len(gs), "groups": gs[offset:offset + limit]}
@@ -343,11 +343,20 @@ def clean_groups(offset: int = 0, limit: int = 40, reason: str | None = None):
 class GroupReq(BaseModel):
     keep: int | None = None
     skip: bool | None = None
+    toggle: int | None = None
+
+
+@app.get("/api/clean/groups/{gid}/get")
+def clean_group_get(gid: int):
+    for g in cleaner.load_groups():
+        if g["gid"] == gid:
+            return g
+    raise HTTPException(404)
 
 
 @app.post("/api/clean/groups/{gid}")
 def clean_group(gid: int, req: GroupReq):
-    g = cleaner.update_group(gid, req.keep, req.skip)
+    g = cleaner.update_group(gid, req.keep, req.skip, req.toggle)
     if not g:
         raise HTTPException(404)
     return g

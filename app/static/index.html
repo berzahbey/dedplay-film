@@ -107,7 +107,7 @@ button.ghost.red{color:var(--bad);border-color:#5a2226}
   </div>
 
   <div class="card hide" id="grpCard">
-    <h2>Kopya grupları <span class="muted" style="font-weight:400">— isteğe bağlı kontrol: başka bir kareyi tıklarsan o kalır; "Atla" o gruba dokunmaz</span></h2>
+    <h2>Kopya grupları <span class="muted" style="font-weight:400">— karelere tıklayarak birden fazlasını "Kalacak" yapabilirsin; "Atla" o gruba dokunmaz. Benzer kareler (farklı poz) sen onaylamadan silinmez.</span></h2>
     <div class="chips" id="reasonChips"></div>
     <div id="groups"></div>
     <div class="row" style="margin-top:12px"><button class="ghost" id="moreGroups">Daha fazla göster</button></div>
@@ -240,7 +240,8 @@ function drawSummary(){
     <div class="stat"><b>${fmt(m.by_reason['birebir aynı'])}</b><span>birebir aynı</span></div>
     <div class="stat"><b>${fmt(m.by_reason['aynı görüntü'])}</b><span>aynı görüntü, farklı boyut/ad</span></div>
     <div class="stat"><b>${fmt(m.by_reason['seri çekim'])}</b><span>seri çekim</span></div>
-    <div class="stat"><b>${fmt(m.by_reason['benzer kare'])}</b><span>benzer kare (farklı poz)</span></div>`;
+    <div class="stat"><b>${fmt(m.by_reason['benzer kare'])}</b><span>benzer kare (onayladıkların)</span></div>
+    <div class="stat"><b>${fmt(m.pending||0)}</b><span>benzer kare grubu onayını bekliyor</span></div>`;
 }
 $('#inboxBtn').onclick=async()=>{await post('/api/clean/inbox');status()};
 $('#findBtn').onclick=async()=>{await post('/api/clean/find',{include_bursts:$('#bursts').checked,include_similar:$('#similar').checked});status()};
@@ -258,15 +259,18 @@ async function loadGroups(reset){
   $('#groups').insertAdjacentHTML('beforeend',r.groups.map(groupHtml).join(''));
   gOff+=r.groups.length;$('#moreGroups').classList.toggle('hide',gOff>=r.total);
 }
-function groupHtml(g){
-  return `<div class="group ${g.skip?'skip':''}" data-g="${g.gid}"><div class="gh"><span class="tag">${g.reason}</span><span class="muted">${g.kind=='photo'?'Fotoğraf':'Video'} · ${g.members.length} dosya · ${g.members[0].taken_at||''}</span><span style="flex:1"></span><button class="ghost skipb">${g.skip?'Atlamayı geri al':'Atla'}</button></div>
-  <div class="ggrid">${g.members.map(m=>{const k=m.id==g.keep,l=m.locked&&!k;return `<div class="gm ${k?'keep':''} ${l?'lock':''}" data-m="${m.id}" title="${m.folder}/${m.name}"><div class="th"><img loading="lazy" src="/api/thumb/${m.id}"><span class="lbl">${k?'Kalacak':l?'🔒 korunuyor':'Çöpe'}</span></div><small>${m.name}</small><small>${m.w||'?'}×${m.h||'?'} · ${gb(m.size)} · ${m.folder}</small></div>`}).join('')}</div></div>`;
+function groupHtml(g){const ks=new Set(g.keeps||[g.keep]);
+  const head=g.needs_ok?(g.skip?`<span class="muted">Benzer kareler otomatik silinmez. Kalmasını istediklerine tıkla, sonra</span><button class="btn skipb" style="padding:7px 14px;font-size:13px">Bu grubu temizle</button>`
+                                 :`<span class="muted" style="color:var(--ok)">Onaylandı: işaretsizler çöpe gidecek</span><button class="ghost skipb">Vazgeç</button>`)
+                     :`<button class="ghost skipb">${g.skip?'Atlamayı geri al':'Atla'}</button>`;
+  return `<div class="group ${g.skip&&!g.needs_ok?'skip':''}" data-g="${g.gid}"><div class="gh"><span class="tag">${g.reason}</span><span class="muted">${g.kind=='photo'?'Fotoğraf':'Video'} · ${g.members.length} dosya · ${g.members[0].taken_at||''}</span><span style="flex:1"></span>${head}</div>
+  <div class="ggrid">${g.members.map(m=>{const k=ks.has(m.id),l=m.locked&&!k;return `<div class="gm ${k?'keep':''} ${l?'lock':''}" data-m="${m.id}" title="${m.folder}/${m.name}\nTıkla: kalsın / çöpe gitsin"><div class="th"><img loading="lazy" src="/api/thumb/${m.id}"><span class="lbl">${k?'Kalacak':l?'🔒 korunuyor':(g.skip?'—':'Çöpe')}</span></div><small>${m.name}</small><small>${m.w||'?'}×${m.h||'?'} · ${gb(m.size)} · ${m.folder}</small></div>`}).join('')}</div></div>`;
 }
 $('#reasonChips').onclick=e=>{const r=e.target.dataset.r;if(r===undefined)return;gReason=r;loadGroups(true)};
 $('#moreGroups').onclick=()=>loadGroups(false);
 $('#groups').onclick=async e=>{const gEl=e.target.closest('.group');if(!gEl)return;const gid=+gEl.dataset.g;
-  if(e.target.classList.contains('skipb')){const g=await post('/api/clean/groups/'+gid,{skip:!gEl.classList.contains('skip')});gEl.outerHTML=groupHtml(g);status();return}
-  const m=e.target.closest('.gm');if(m){const g=await post('/api/clean/groups/'+gid,{keep:+m.dataset.m});gEl.outerHTML=groupHtml(g);status()}};
+  if(e.target.classList.contains('skipb')){const cur=(await api(`/api/clean/groups/${gid}/get`));const g=await post('/api/clean/groups/'+gid,{skip:!cur.skip});gEl.outerHTML=groupHtml(g);status();return}
+  const m=e.target.closest('.gm');if(m){const g=await post('/api/clean/groups/'+gid,{toggle:+m.dataset.m});gEl.outerHTML=groupHtml(g);status()}};
 
 async function loadMoves(){const r=await api('/api/moves');
   $('#moves').innerHTML=r.length?r.map(b=>`<div class="row" style="padding:6px 0;border-bottom:1px solid var(--line)"><b>${b.batch}</b><span class="muted">${fmt(b.n)} dosya Resimler/Videolar'a taşındı${b.undone?` · ${fmt(b.undone)} geri alındı`:''}</span><span style="flex:1"></span>${b.undone<b.n?`<button class="ghost" data-undo="${b.batch}">Bu düzenlemeyi geri al</button>`:''}</div>`).join(''):'Henüz düzenleme yapılmadı.'}

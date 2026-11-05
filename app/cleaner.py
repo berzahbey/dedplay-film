@@ -253,7 +253,9 @@ def _find(include_bursts, keep_running=False, include_similar=True):
                 "reason": "birebir aynı" if reasons == {"birebir aynı"} else
                           ("aynı görüntü" if "aynı görüntü" in reasons or "birebir aynı" in reasons else
                            ("seri çekim" if "seri çekim" in reasons else "benzer kare")),
-                "keep": g[0]["id"], "skip": False,
+                "keep": g[0]["id"], "keeps": [g[0]["id"]],
+                # Benzer kareler (farklı poz) zevk meselesi: otomatik çöpe atılmaz, kullanıcı onaylarsa gider
+                "skip": reasons <= {"benzer kare"}, "needs_ok": reasons <= {"benzer kare"},
                 "members": [{"id": r["id"], "path": r["path"], "name": os.path.basename(r["path"]),
                              "folder": os.path.relpath(r["folder"], archive_root()), "size": r["size"],
                              "w": r["width"], "h": r["height"], "taken_at": r["taken_at"],
@@ -290,10 +292,13 @@ def summary(groups=None):
     groups = load_groups() if groups is None else groups
     s = {"groups": 0, "files": 0, "bytes": 0, "photos": 0, "videos": 0,
          "by_reason": {"birebir aynı": 0, "aynı görüntü": 0, "seri çekim": 0, "benzer kare": 0}}
+    s["pending"] = 0
     for g in groups:
+        if g.get("needs_ok") and g["skip"]:
+            s["pending"] += 1
         if g["skip"]:
             continue
-        gone = [m for m in g["members"] if m["id"] != g["keep"] and not m.get("locked")]
+        gone = [m for m in g["members"] if m["id"] not in keeps_of(g) and not m.get("locked")]
         if not gone:
             continue
         s["groups"] += 1
@@ -304,12 +309,27 @@ def summary(groups=None):
     return s
 
 
-def update_group(gid, keep=None, skip=None):
+def keeps_of(g):
+    return set(g.get("keeps") or [g["keep"]])
+
+
+def update_group(gid, keep=None, skip=None, toggle=None):
+    """keep: sadece bu kalsın · toggle: bu karenin kalıp kalmayacağını değiştir (birden çok kare kalabilir)."""
     groups = load_groups()
     for g in groups:
         if g["gid"] == gid:
-            if keep is not None and any(m["id"] == keep for m in g["members"]):
-                g["keep"] = keep
+            ids = {m["id"] for m in g["members"]}
+            if keep is not None and keep in ids:
+                g["keep"], g["keeps"] = keep, [keep]
+            if toggle is not None and toggle in ids:
+                ks = keeps_of(g)
+                if toggle in ks and len(ks) > 1:
+                    ks.discard(toggle)
+                else:
+                    ks.add(toggle)
+                g["keeps"] = sorted(ks)
+                if g["keep"] not in ks:
+                    g["keep"] = next(m["id"] for m in g["members"] if m["id"] in ks)
             if skip is not None:
                 g["skip"] = bool(skip)
             _save(groups)
@@ -363,8 +383,15 @@ def _apply(keep_running=False, batch=None):
         groups = load_groups()
         batch = batch or datetime.now().strftime("%Y-%m-%d %H.%M")
         root = archive_root()
+        # Gruplar bulunduktan sonra dosyalar taşınmış olabilir (düzenleme, Gelen): güncel yolları al
+        with db.db() as con:
+            cur = {r["id"]: r["path"] for r in con.execute("SELECT id, path FROM media")}
+        for g in groups:
+            for m in g["members"]:
+                if m["id"] in cur:
+                    m["path"] = cur[m["id"]]
         todo = [(g, m) for g in groups if not g["skip"] for m in g["members"]
-                if m["id"] != g["keep"] and not m.get("locked")]
+                if m["id"] not in keeps_of(g) and not m.get("locked")]
         from .organize import abs_dir, settings
         inbox = abs_dir(settings()["inbox"]).rstrip("/") + "/"
         state["todo"] = len(todo)
