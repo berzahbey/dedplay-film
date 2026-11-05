@@ -4,3 +4,5 @@ pillow==11.1.0
 pillow-heif==0.21.0
 numpy==2.2.2
 opencv-python-headless==4.10.0.84
+dlib-bin==20.0.1.post1
+face_recognition_models==0.3.0

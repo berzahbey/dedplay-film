@@ -297,6 +297,15 @@ def move_batches():
 
 # ---------- Tam akış ----------
 
+def _faces_later():
+    """Yeni fotoğraflarda yüzleri arka planda bul ve kişilere ekle (Kişiler sekmesi)."""
+    try:
+        from . import faces
+        faces.run_all()
+    except Exception:
+        traceback.print_exc()
+
+
 def apply_and_organize():
     """Onaydan sonra: bulunan kopyaları çöpe at, kalanları düzenle."""
     with _lock:
@@ -311,6 +320,7 @@ def apply_and_organize():
             organize_files(batch)
             save_settings(auto=True, last_full=batch)
             state.update(phase="Tamamlandı", last_run=batch)
+            _faces_later()
         except Exception as e:
             traceback.print_exc()
             state.update(error=str(e), phase="Hata")
@@ -347,6 +357,7 @@ def _run(full, apply_trash, scope):
                 save_settings(auto=True, last_full=batch)
         state["phase"] = "Tamamlandı"
         state["last_run"] = batch
+        _faces_later()
     except Exception as e:
         traceback.print_exc()
         state.update(error=str(e), phase="Hata")

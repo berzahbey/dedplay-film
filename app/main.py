@@ -5,7 +5,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 
-from . import cleaner, db, organize, orient, planner, render, scanner, styles
+from . import cleaner, db, faces, organize, orient, planner, render, scanner, styles
 from .analyze import load_image
 from .config import MEDIA_DIRS, MUSIC_DEFAULT, MUSIC_DIR, MUSIC_EXT, OUTPUT_DIR, THUMB_DIR
 
@@ -297,6 +297,7 @@ def clean_status():
         t = con.execute("SELECT COUNT(*) n, COALESCE(SUM(size),0) b FROM trash WHERE status='çöpte'").fetchone()
     st["trash"] = {"files": t["n"], "bytes": t["b"]}
     st["scan"] = scanner.state
+    st["faces"] = faces.state
     with db.db() as con:
         st["live"] = con.execute("SELECT COUNT(*) FROM media WHERE live_of IS NOT NULL").fetchone()[0]
         st["short"] = con.execute("SELECT COUNT(*) FROM media WHERE kind='video' AND live_of IS NULL "
@@ -416,7 +417,7 @@ class TrashReq(BaseModel):
     ids: list[int] | None = None
     batch: str | None = None
     all: bool = False
-    pin: bool = True   # False: geri alınanlar bir sonraki taramada yeniden değerlendirilir
+    pin: bool = False  # geri alınanlar bir sonraki taramada normal şekilde yeniden değerlendirilir
 
 
 @app.post("/api/trash/restore")
@@ -534,3 +535,87 @@ def library(kind: str = "photo", year: str | None = None, offset: int = 0, limit
         for it in items:
             it["has_photo"] = bool(has.get(it["id"]))
     return {"total": total, "items": items}
+
+
+# ================= Kişiler (yüz tanıma) =================
+
+@app.get("/api/people")
+def people(include_small: int = 0):
+    with db.db() as con:
+        rows = con.execute("""SELECT p.id, p.name, p.cover, COUNT(DISTINCT f.media_id) n
+                              FROM people p JOIN faces f ON f.person_id=p.id JOIN media m ON m.id=f.media_id
+                              WHERE p.hidden=0 GROUP BY p.id ORDER BY (p.name IS NULL), n DESC""").fetchall()
+        pend = con.execute("SELECT COUNT(*) FROM media WHERE kind='photo' AND faces_done IS NULL").fetchone()[0]
+        total = con.execute("SELECT COUNT(*) FROM media WHERE kind='photo'").fetchone()[0]
+    out = [dict(r) for r in rows if include_small or r["n"] >= 3 or r["name"]]
+    return {"people": out, "pending": pend, "total": total, "state": faces.state,
+            "small": sum(1 for r in rows if r["n"] < 3 and not r["name"])}
+
+
+@app.post("/api/people/run")
+def people_run():
+    return {"started": faces.run_all()}
+
+
+@app.get("/api/people/{pid}/photos")
+def person_photos(pid: int, offset: int = 0, limit: int = 200):
+    with db.db() as con:
+        total = con.execute("SELECT COUNT(DISTINCT f.media_id) FROM faces f JOIN media m ON m.id=f.media_id "
+                            "WHERE f.person_id=?", (pid,)).fetchone()[0]
+        rows = con.execute("""SELECT DISTINCT m.id, m.path, m.taken_at FROM faces f JOIN media m ON m.id=f.media_id
+                              WHERE f.person_id=? ORDER BY m.taken_at DESC LIMIT ? OFFSET ?""",
+                           (pid, limit, offset)).fetchall()
+        p = con.execute("SELECT id, name FROM people WHERE id=?", (pid,)).fetchone()
+    root = cleaner.archive_root()
+    return {"person": dict(p) if p else None, "total": total,
+            "items": [{"id": r["id"], "name": os.path.basename(r["path"]), "kind": "photo",
+                       "folder": os.path.relpath(os.path.dirname(r["path"]), root), "taken_at": r["taken_at"]}
+                      for r in rows]}
+
+
+class PersonReq(BaseModel):
+    name: str | None = None
+    hidden: bool | None = None
+
+
+@app.post("/api/people/{pid}")
+def person_update(pid: int, req: PersonReq):
+    with db.db() as con:
+        if req.name is not None:
+            con.execute("UPDATE people SET name=? WHERE id=?", (req.name.strip() or None, pid))
+        if req.hidden is not None:
+            con.execute("UPDATE people SET hidden=? WHERE id=?", (1 if req.hidden else 0, pid))
+    return {"ok": True}
+
+
+class MergeReq(BaseModel):
+    ids: list[int]
+
+
+@app.post("/api/people/merge")
+def people_merge(req: MergeReq):
+    if len(req.ids) < 2:
+        raise HTTPException(400, "En az iki kişi seç")
+    with db.db() as con:
+        named = [r["id"] for r in con.execute(
+            f"SELECT id FROM people WHERE name IS NOT NULL AND id IN ({','.join('?' * len(req.ids))})", req.ids)]
+    target = named[0] if named else req.ids[0]
+    faces.merge(target, [i for i in req.ids if i != target])
+    return {"target": target}
+
+
+@app.get("/api/face/{fid}/thumb")
+def face_thumb(fid: int):
+    out = os.path.join(THUMB_DIR, f"face{fid}.jpg")
+    if not os.path.exists(out):
+        with db.db() as con:
+            r = con.execute("SELECT f.x,f.y,f.w,f.h,m.path FROM faces f JOIN media m ON m.id=f.media_id WHERE f.id=?",
+                            (fid,)).fetchone()
+        if not r:
+            raise HTTPException(404)
+        im = load_image(r["path"], 1600)
+        W, H = im.size
+        cx, cy = (r["x"] + r["w"] / 2) * W, (r["y"] + r["h"] / 2) * H
+        half = max(r["w"] * W, r["h"] * H) * 0.9
+        im.crop((int(cx - half), int(cy - half), int(cx + half), int(cy + half))).resize((200, 200)).save(out, quality=85)
+    return FileResponse(out, headers={"Cache-Control": "max-age=604800"})

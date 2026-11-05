@@ -42,6 +42,11 @@ CREATE TABLE IF NOT EXISTS moves (
     at TEXT DEFAULT (datetime('now','localtime')), undone INTEGER DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS pins (path TEXT PRIMARY KEY);
+CREATE TABLE IF NOT EXISTS faces (id INTEGER PRIMARY KEY, media_id INTEGER, x REAL, y REAL, w REAL, h REAL,
+                                  emb BLOB, person_id INTEGER);
+CREATE INDEX IF NOT EXISTS idx_faces_media ON faces(media_id);
+CREATE INDEX IF NOT EXISTS idx_faces_person ON faces(person_id);
+CREATE TABLE IF NOT EXISTS people (id INTEGER PRIMARY KEY, name TEXT, cover INTEGER, hidden INTEGER DEFAULT 0);
 CREATE TABLE IF NOT EXISTS scene_pairs (a INTEGER, b INTEGER, inl INTEGER, ratio REAL, PRIMARY KEY(a, b));
 CREATE TABLE IF NOT EXISTS scene_pairs2 (a INTEGER, b INTEGER, inl INTEGER, area REAL, overlap REAL, diff REAL,
                                          PRIMARY KEY(a, b));
@@ -84,7 +89,7 @@ def init():
                           ("model", "TEXT"), ("software", "TEXT"), ("ucomment", "TEXT"),
                           ("src_checked", "INTEGER"), ("src", "TEXT"), ("smiles", "INTEGER"),
                           ("fsharp", "REAL"), ("expo", "REAL"), ("q_done", "INTEGER"),
-                          ("live_id", "TEXT"), ("live_of", "INTEGER"), ("short_photo", "INTEGER")):
+                          ("live_id", "TEXT"), ("live_of", "INTEGER"), ("short_photo", "INTEGER"), ("faces_done", "INTEGER")):
             if name not in cols:
                 con.execute(f"ALTER TABLE media ADD COLUMN {name} {typ}")
         # Eski sürümün 64 bitlik izleri ve analiz edilmemiş videolar yeniden analiz edilir

@@ -205,11 +205,33 @@ def _find(include_bursts, keep_running=False, include_similar=True):
             _set(phase="Benzer kareler aranıyor (yapay görü: aynı sahne, farklı poz)", todo=0, done=0)
             from .scene import find_groups
             photos = [r for r in rows if r["kind"] == "photo"]
-            for g in find_groups(photos, lambda d, t: state.update(done=d, todo=t)):
-                for x in g[1:]:
-                    uf.union(g[0], x)
+            scene_groups = find_groups(photos, lambda d, t: state.update(done=d, todo=t))
+            # Yüz tanıma: aynı sahne ama kişiler farklıysa ayrı anlardır (baba+çocuk ≠ dede+çocuk)
+            from . import faces as F
+            need = [m for g in scene_groups for m in g]
+            with db.db() as con:
+                pend = [(r["id"], r["path"]) for r in con.execute(
+                    f"SELECT id, path FROM media WHERE faces_done IS NULL AND id IN ({','.join('?' * len(need))})", need)] if need else []
+            if pend:
+                _set(phase="Benzer karelerde kişiler tanınıyor (yüz tanıma)", todo=len(pend), done=0)
+                F.analyze(pend, lambda d, t: state.update(done=d, todo=t))
+            fmap = F.faces_of(need)
+            for g in scene_groups:
+                subs = []                       # aynı kişileri içeren alt gruplar
                 for x in g:
-                    reason.setdefault(x, "benzer kare")
+                    for sg in subs:
+                        if F.same_people(fmap[sg[0]], fmap[x]) is not False:
+                            sg.append(x)
+                            break
+                    else:
+                        subs.append([x])
+                for sg in subs:
+                    if len(sg) < 2:
+                        continue
+                    for x in sg[1:]:
+                        uf.union(sg[0], x)
+                    for x in sg:
+                        reason.setdefault(x, "benzer kare")
 
         by_id = {r["id"]: r for r in rows}
         groups = defaultdict(list)
@@ -255,7 +277,8 @@ def _find(include_bursts, keep_running=False, include_similar=True):
                            ("seri çekim" if "seri çekim" in reasons else "benzer kare")),
                 "keep": g[0]["id"], "keeps": [g[0]["id"]],
                 # Benzer kareler (farklı poz) zevk meselesi: otomatik çöpe atılmaz, kullanıcı onaylarsa gider
-                "skip": reasons <= {"benzer kare"}, "needs_ok": reasons <= {"benzer kare"},
+                # Benzer kareler artık yüz tanımayla doğrulandığı için (aynı kişiler) otomatik temizlenir
+                "skip": False, "needs_ok": False,
                 "members": [{"id": r["id"], "path": r["path"], "name": os.path.basename(r["path"]),
                              "folder": os.path.relpath(r["folder"], archive_root()), "size": r["size"],
                              "w": r["width"], "h": r["height"], "taken_at": r["taken_at"],
@@ -494,7 +517,7 @@ def trash_ids(ids, reason):
     return n
 
 
-def restore(ids=None, batch=None, pin=True):
+def restore(ids=None, batch=None, pin=False):
     """Çöpteki dosyaları eski yerlerine geri taşır. Dönüş: geri alınan sayısı."""
     q = "SELECT * FROM trash WHERE status='çöpte'"
     args = []

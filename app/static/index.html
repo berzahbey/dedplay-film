@@ -58,8 +58,12 @@ button.ghost.red{color:var(--bad);border-color:#5a2226}
 .lb .nv{position:fixed;top:50%;font-size:40px;background:none;border:0;color:#fff;cursor:pointer;padding:20px}
 .lb .cap{position:fixed;bottom:14px;left:0;right:0;text-align:center;color:#ccd;font-size:13px}
 .flist label{display:flex;gap:10px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--line)}
-.rail{position:fixed;right:10px;top:150px;bottom:20px;width:70px;display:flex;flex-direction:column;gap:2px;overflow-y:auto;z-index:15;scrollbar-width:none}
-.rail button{background:none;border:0;color:var(--mu);font:inherit;font-size:13px;text-align:right;padding:4px 8px;border-radius:6px;cursor:pointer}
+.pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:14px}
+.pc{text-align:center;cursor:pointer;position:relative}.pc img{width:110px;height:110px;border-radius:50%;object-fit:cover;border:3px solid var(--line);display:block;margin:0 auto 6px}
+.pc:hover img{border-color:var(--ac)}.pc b{display:block;font-size:14px}.pc small{color:var(--mu)}
+.pc.sel img{border-color:var(--sel)}.pc.sel::after{content:"✓";position:absolute;left:calc(50% + 30px);top:4px;background:var(--sel);color:#fff;border-radius:50%;width:24px;height:24px;display:grid;place-items:center}
+.rail{position:fixed;right:8px;top:130px;bottom:12px;width:70px;display:flex;flex-direction:column;gap:0;overflow-y:auto;z-index:15;scrollbar-width:thin}
+.rail button{background:none;border:0;color:var(--mu);font:inherit;font-size:12px;line-height:1.2;text-align:right;padding:3px 8px;border-radius:6px;cursor:pointer;flex:0 0 auto}
 .rail button:hover{background:var(--line);color:var(--tx)}.rail button.on{color:var(--ac);font-weight:700}
 .ysec{margin-top:18px}.ysec h3{margin:0 0 8px;font-size:18px;position:sticky;top:150px;background:var(--card);padding:6px 0;z-index:5}
 .ysec h3 small{color:var(--mu);font-weight:400;font-size:13px}
@@ -75,6 +79,7 @@ button.ghost.red{color:var(--bad);border-color:#5a2226}
     <button data-t="photos">🖼 Tüm resimler</button>
     <button data-t="videos">🎬 Tüm videolar</button>
     <button data-t="other">📱 Ekran &amp; kaydedilenler</button>
+    <button data-t="people">👤 Kişiler</button>
     <button data-t="trash">🗑 Çöp kutusu <span id="trashN"></span></button>
     <button data-t="settings">⚙ Ayarlar</button>
     <a href="/film">Film (deneysel)</a>
@@ -139,6 +144,32 @@ button.ghost.red{color:var(--bad);border-color:#5a2226}
     <div id="libSections"></div>
   </div>
   <nav class="rail" id="rail"></nav>
+</section>
+
+<!-- ============ KİŞİLER ============ -->
+<section id="v-people" class="hide">
+  <div class="card" id="pplList">
+    <h2>Kişiler</h2>
+    <div class="muted" id="pplInfo"></div>
+    <div class="bar hide" id="pplBarW"><i id="pplBar" style="width:0"></i></div>
+    <div class="row" style="margin:12px 0">
+      <button class="ghost" id="pplRun">Yüzleri şimdi tara</button>
+      <span style="flex:1"></span>
+      <button class="ghost" id="pplMergeMode">⧉ Aynı kişileri birleştir</button>
+      <button class="btn hide" id="pplMerge">Seçilenleri birleştir</button>
+    </div>
+    <div class="pgrid" id="pplGrid"></div>
+    <div class="row" style="margin-top:12px"><button class="ghost" id="pplSmall">Az görünen kişileri de göster</button></div>
+  </div>
+  <div class="card hide" id="pplOne">
+    <div class="row"><button class="ghost" id="pplBack">← Kişiler</button>
+      <input id="pplName" placeholder="İsim ver (ör. Kenan)" style="flex:1;min-width:200px;font-size:17px">
+      <button class="btn" id="pplSave">Kaydet</button>
+      <button class="ghost red" id="pplHide" title="Bu kişiyi listede gösterme">Gizle</button></div>
+    <div class="muted" id="pplOneInfo" style="margin:10px 0"></div>
+    <div class="grid" id="pplPhotos"></div>
+    <div class="row" style="margin-top:12px"><button class="ghost" id="pplMore">Daha fazla</button></div>
+  </div>
 </section>
 
 <!-- ============ ÇÖP ============ -->
@@ -209,7 +240,7 @@ let tab='clean', ST=null;
 $('#tabs').onclick=e=>{const t=e.target.closest('button')?.dataset.t;if(!t)return;tab=t;
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t==t));
   $('#v-clean').classList.toggle('hide',t!='clean');$('#v-lib').classList.toggle('hide',!(t=='photos'||t=='videos'||t=='other'));
-  $('#v-trash').classList.toggle('hide',t!='trash');$('#v-settings').classList.toggle('hide',t!='settings');
+  $('#v-trash').classList.toggle('hide',t!='trash');$('#v-people').classList.toggle('hide',t!='people');if(t=='people')loadPeople();$('#v-settings').classList.toggle('hide',t!='settings');
   if(t=='photos'||t=='videos'||t=='other')openLib({photos:'photo',videos:'video',other:'other'}[t]);if(t=='trash')loadTrash(true);if(t=='settings')loadSettings()};
 
 // ---- durum
@@ -302,7 +333,7 @@ async function buildLib(){
   secObs=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting)loadSec(e.target.dataset.y)}),{rootMargin:'800px 0px'});
   moreObs=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting)loadSec(e.target.parentElement.dataset.y)}),{rootMargin:'1200px 0px'});
   railObs=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting&&Date.now()>railLock){const y=e.target.parentElement.dataset.y;
-    document.querySelectorAll('#rail button').forEach(b=>b.classList.toggle('on',b.dataset.y==y))}}),{rootMargin:'-160px 0px -70% 0px'});
+    document.querySelectorAll('#rail button').forEach(b=>{b.classList.toggle('on',b.dataset.y==y);if(b.dataset.y==y)b.scrollIntoView({block:'nearest'})})}}),{rootMargin:'-160px 0px -70% 0px'});
   document.querySelectorAll('#libSections .ysec').forEach(el=>{secObs.observe(el);moreObs.observe(el.querySelector('.more'));railObs.observe(el.querySelector('h3'))});
   libSel()}
 async function loadSec(y){const st=lib.sec[y];if(!st||st.loading||st.off>=st.total)return;st.loading=true;
@@ -338,6 +369,43 @@ $('#libTrash').onclick=async()=>{if(!confirm(`${fmt(lib.sel.size)} dosya çöp k
 // sekme değişince sağ çubuk sadece galeride görünsün
 const _railFix=()=>$('#rail').classList.toggle('hide',$('#v-lib').classList.contains('hide'));
 new MutationObserver(_railFix).observe($('#v-lib'),{attributes:true});
+
+// ---- kişiler
+let PP={small:false,merge:false,sel:new Set(),cur:null,off:0,items:[]};
+async function loadPeople(){const r=await api('/api/people'+(PP.small?'?include_small=1':''));const st=r.state;
+  const scanned=r.total-r.pending;
+  $('#pplInfo').textContent=st.running?`⏳ ${st.phase} — ${fmt(st.done)} / ${fmt(st.todo)} fotoğraf`:
+    (r.pending?`${fmt(scanned)} / ${fmt(r.total)} fotoğrafta yüzler tarandı. Kalanlar arka planda taranır (ya da "Yüzleri şimdi tara").`:
+     `${fmt(r.people.length)} kişi · tüm fotoğraflar tarandı. Bir kişiye tıkla, isim ver; aynı kişi iki kez çıktıysa "Aynı kişileri birleştir".`);
+  $('#pplBarW').classList.toggle('hide',!st.running);$('#pplBar').style.width=(st.todo?st.done/st.todo*100:0)+'%';
+  $('#pplRun').disabled=st.running||!r.pending;
+  $('#pplSmall').textContent=PP.small?'Az görünenleri gizle':`Az görünen kişileri de göster (${fmt(r.small)})`;
+  $('#pplGrid').innerHTML=r.people.length?r.people.map(p=>`<div class="pc ${PP.sel.has(p.id)?'sel':''}" data-p="${p.id}"><img loading="lazy" src="/api/face/${p.cover}/thumb"><b>${p.name||'İsimsiz'}</b><small>${fmt(p.n)} fotoğraf</small></div>`).join('')
+    :'<div class="muted">Henüz kişi yok.</div>';
+  if(st.running)setTimeout(()=>{if(!$('#v-people').classList.contains('hide')&&!PP.cur)loadPeople()},4000)}
+$('#pplRun').onclick=async()=>{await post('/api/people/run');loadPeople()};
+$('#pplSmall').onclick=()=>{PP.small=!PP.small;loadPeople()};
+$('#pplMergeMode').onclick=()=>{PP.merge=!PP.merge;PP.sel.clear();$('#pplMerge').classList.toggle('hide',!PP.merge);
+  $('#pplMergeMode').textContent=PP.merge?'✕ Vazgeç':'⧉ Aynı kişileri birleştir';loadPeople()};
+$('#pplMerge').onclick=async()=>{if(PP.sel.size<2)return alert('Birleştirmek için aynı kişiye ait en az iki kart seç');
+  await post('/api/people/merge',{ids:[...PP.sel]});PP.sel.clear();PP.merge=false;$('#pplMerge').classList.add('hide');$('#pplMergeMode').textContent='⧉ Aynı kişileri birleştir';loadPeople()};
+$('#pplGrid').onclick=e=>{const c=e.target.closest('.pc');if(!c)return;const id=+c.dataset.p;
+  if(PP.merge){PP.sel.has(id)?PP.sel.delete(id):PP.sel.add(id);c.classList.toggle('sel');return}
+  openPerson(id)};
+async function openPerson(id){PP.cur=id;PP.off=0;PP.items=[];$('#pplPhotos').innerHTML='';
+  $('#pplList').classList.add('hide');$('#pplOne').classList.remove('hide');window.scrollTo(0,0);await morePerson()}
+async function morePerson(){const r=await api(`/api/people/${PP.cur}/photos?offset=${PP.off}&limit=200`);
+  if(!PP.off)$('#pplName').value=r.person?.name||'';
+  const start=PP.items.length;PP.items.push(...r.items);PP.off+=r.items.length;
+  $('#pplOneInfo').textContent=`${fmt(r.total)} fotoğraf`;
+  $('#pplPhotos').insertAdjacentHTML('beforeend',r.items.map((i,k)=>`<div class="th" data-i="${start+k}" title="${i.folder}/${i.name}\n${i.taken_at||''}"><img loading="lazy" src="/api/thumb/${i.id}"></div>`).join(''));
+  $('#pplMore').classList.toggle('hide',PP.off>=r.total)}
+$('#pplMore').onclick=morePerson;
+$('#pplPhotos').onclick=e=>{const t=e.target.closest('.th');if(t)lightbox(PP.items,+t.dataset.i,i=>'/api/media/'+i.id,'photo')};
+$('#pplBack').onclick=()=>{PP.cur=null;$('#pplOne').classList.add('hide');$('#pplList').classList.remove('hide');loadPeople()};
+$('#pplSave').onclick=async()=>{await post('/api/people/'+PP.cur,{name:$('#pplName').value});$('#pplBack').click()};
+$('#pplName').onkeydown=e=>{if(e.key=='Enter')$('#pplSave').click()};
+$('#pplHide').onclick=async()=>{if(!confirm('Bu kişi listede gösterilmesin mi? (Fotoğraflara dokunulmaz)'))return;await post('/api/people/'+PP.cur,{hidden:true});$('#pplBack').click()};
 
 // ---- büyük görüntüleme
 let LB=null;
