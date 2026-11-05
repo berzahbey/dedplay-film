@@ -104,6 +104,8 @@ def init():
             con.execute("UPDATE media SET path=? || substr(path, ?), folder=? || substr(folder || '/', ?) "
                         "WHERE substr(path, 1, ?) = ?", (new, n + 1, new, n + 1, n, old))
             con.execute("UPDATE media SET folder=rtrim(folder, '/')")
+        # Geri alınan dosyalar artık kilitlenmiyor: eski kilitleri kaldır
+        con.execute("DELETE FROM pins")
         # Yarım kalmış işleri kapat (container yeniden başlarsa)
         con.execute("UPDATE jobs SET status='hata', message='Sunucu yeniden başladı' "
                     "WHERE status IN ('sırada','çalışıyor')")

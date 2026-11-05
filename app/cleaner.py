@@ -494,7 +494,7 @@ def trash_ids(ids, reason):
     return n
 
 
-def restore(ids=None, batch=None):
+def restore(ids=None, batch=None, pin=True):
     """Çöpteki dosyaları eski yerlerine geri taşır. Dönüş: geri alınan sayısı."""
     q = "SELECT * FROM trash WHERE status='çöpte'"
     args = []
@@ -516,8 +516,9 @@ def restore(ids=None, batch=None):
                 _move(tp, orig if back == r["orig_path"] else back + orig[len(r["orig_path"]):])
         with db.db() as con:
             con.execute("UPDATE trash SET status='geri alındı', orig_path=? WHERE id=?", (back, r["id"]))
-            # geri alınan dosya bir daha kopya diye çöpe atılmasın
-            con.execute("INSERT OR IGNORE INTO pins(path) VALUES(?)", (back,))
+            # geri alınan dosya bir daha kopya diye çöpe atılmasın (pin=False: yeniden değerlendirilsin)
+            if pin:
+                con.execute("INSERT OR IGNORE INTO pins(path) VALUES(?)", (back,))
         n += 1
     _cleanup_empty_dirs()
     return n

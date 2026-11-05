@@ -380,6 +380,15 @@ def set_settings(req: SettingsReq):
     return organize.save_settings(**{k: v for k, v in req.model_dump().items() if v is not None})
 
 
+@app.post("/api/pins/clear")
+def pins_clear():
+    """Çöpten geri alınanların 'dokunma' kilidini kaldırır: bir sonraki taramada yeniden değerlendirilirler."""
+    with db.db() as con:
+        n = con.execute("SELECT COUNT(*) FROM pins").fetchone()[0]
+        con.execute("DELETE FROM pins")
+    return {"cleared": n}
+
+
 @app.get("/api/moves")
 def moves():
     return organize.move_batches()
@@ -407,13 +416,16 @@ class TrashReq(BaseModel):
     ids: list[int] | None = None
     batch: str | None = None
     all: bool = False
+    pin: bool = True   # False: geri alınanlar bir sonraki taramada yeniden değerlendirilir
 
 
 @app.post("/api/trash/restore")
 def trash_restore(req: TrashReq):
     if not (req.ids or req.batch or req.all):
         raise HTTPException(400, "Seçim yok")
-    n = cleaner.restore(req.ids, req.batch)
+    if cleaner.state["running"]:
+        raise HTTPException(400, "Önce süren işlemin bitmesini bekle")
+    n = cleaner.restore(req.ids, req.batch, req.pin)
     return {"restored": n}
 
 

@@ -383,7 +383,8 @@ $('#tRestoreSel').onclick=async()=>{const r=await post('/api/trash/restore',{ids
 $('#tDeleteSel').onclick=async()=>{if(!confirm(`${fmt(T.sel.size)} dosya KALICI olarak silinsin mi? Bu geri alınamaz.`))return;
   const r=await post('/api/trash/delete',{ids:[...T.sel]});alert(`${fmt(r.deleted)} dosya silindi, ${gb(r.freed)} yer açıldı`);loadTrash(true);status()};
 $('#tRestoreAll').onclick=async()=>{const what=T.batch?`"${T.batch}" turundaki`:'Çöpteki TÜM';if(!confirm(`${what} dosyalar eski yerlerine geri alınsın mı?`))return;
-  const r=await post('/api/trash/restore',T.batch?{batch:T.batch}:{all:true});alert(fmt(r.restored)+' dosya geri alındı');loadTrash(true);status()};
+  const r=await post('/api/trash/restore',T.batch?{batch:T.batch}:{all:true});
+  alert(fmt(r.restored)+' dosya geri alındı');loadTrash(true);status()};
 $('#tDeleteAll').onclick=async()=>{const what=T.batch?`"${T.batch}" turundaki`:'Çöpteki TÜM';
   if(!confirm(`${what} dosyalar KALICI olarak silinecek. Bu geri alınamaz.\n\nEmin misin?`))return;
   if(!confirm('Son kez soruyorum: kalıcı silinsin mi?'))return;
