@@ -172,7 +172,11 @@ def run_all():
                 todo = [(r["id"], r["path"]) for r in con.execute(
                     "SELECT id, path FROM media WHERE kind='photo' AND faces_done IS NULL ORDER BY taken_at DESC")]
             state["todo"] = len(todo)
-            analyze(todo, lambda d, t: state.update(done=d))
+            # parça parça: her 200 fotoğrafta bir kişiler güncellenir (beklemeden görünsünler)
+            for k in range(0, len(todo), 200):
+                part = todo[k:k + 200]
+                analyze(part, lambda d, t, k=k: state.update(done=k + d))
+                cluster()
             state["phase"] = "Yüzler kişilere ayrılıyor"
             cluster()
             state["phase"] = "Tamamlandı"
@@ -184,3 +188,18 @@ def run_all():
             state["finished"] = time.time()
     threading.Thread(target=go, daemon=True).start()
     return True
+
+
+def _boot():
+    """Sunucu açılınca: yüzlere bakılmamış fotoğraf varsa taramayı kendiliğinden başlat."""
+    time.sleep(90)
+    try:
+        with db.db() as con:
+            n = con.execute("SELECT COUNT(*) FROM media WHERE kind='photo' AND faces_done IS NULL").fetchone()[0]
+        if n:
+            run_all()
+    except Exception:
+        traceback.print_exc()
+
+
+threading.Thread(target=_boot, daemon=True).start()

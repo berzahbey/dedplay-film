@@ -84,7 +84,7 @@ button.ghost.red{color:var(--bad);border-color:#5a2226}
     <button data-t="settings">⚙ Ayarlar</button>
     <a href="/film">Film (deneysel)</a>
   </nav>
-  <div class="pill" id="pill">…</div>
+  <div class="pill" id="pill" style="cursor:pointer" title="Açıp kapatmak için tıkla (Ayarlar)">…</div>
 </header>
 
 <main>
@@ -247,7 +247,7 @@ $('#tabs').onclick=e=>{const t=e.target.closest('button')?.dataset.t;if(!t)retur
 async function status(){
   try{ST=await api('/api/clean/status')}catch(e){return}
   const s=ST.settings, run=ST.running;
-  $('#pill').textContent=run?`⏳ ${ST.phase}`:(s.auto?'Otomatik düzen açık':'Otomatik düzen kapalı');
+  $('#pill').onclick=()=>document.querySelector('[data-t="settings"]').click();$('#pill').textContent=run?`⏳ ${ST.phase}`:(s.auto?'Otomatik düzen açık':'Otomatik düzen kapalı');
   $('#trashN').textContent=ST.trash.files?`(${fmt(ST.trash.files)})`:'';
   $('#howto').innerHTML=`Tüm arşiv taranır: kopyalar, farklı ad/boyuttaki aynı fotoğraflar, seri çekimler ve benzer kareler bulunur; her grupta <b>en iyisi</b> kalır, diğerleri <b>çöp kutusuna</b> gider. Kalanlar <b>${s.photos_dir}/&lt;yıl&gt;</b> ve <b>${s.videos_dir}/&lt;yıl&gt;</b> klasörlerine, ekran görüntüleri ve kaydedilenler <b>${s.other_dir}</b> klasörüne yerleşir. Olduğu gibi kalan klasörler: <b>${s.protected.join(', ')||'yok'}</b>. Yeni dosyaları <b>${s.inbox}</b> klasörüne at; otomatik işlenir.`;
   $('#findBtn').disabled=$('#inboxBtn').disabled=run;$('#applyBtn2').disabled=run;$('#applyInfo2').textContent=ST.summary.files?`${fmt(ST.summary.files)} dosya (${gb(ST.summary.bytes)}) çöpe gidecek`:'';$('#applyBtn').disabled=run;
@@ -374,7 +374,7 @@ new MutationObserver(_railFix).observe($('#v-lib'),{attributes:true});
 let PP={small:false,merge:false,sel:new Set(),cur:null,off:0,items:[]};
 async function loadPeople(){const r=await api('/api/people'+(PP.small?'?include_small=1':''));const st=r.state;
   const scanned=r.total-r.pending;
-  $('#pplInfo').textContent=st.running?`⏳ ${st.phase} — ${fmt(st.done)} / ${fmt(st.todo)} fotoğraf`:
+  $('#pplInfo').textContent=st.error?`⚠ Yüz taraması hata verdi: ${st.error}`:st.running?`⏳ ${st.phase} — ${fmt(st.done)} / ${fmt(st.todo)} fotoğraf`:
     (r.pending?`${fmt(scanned)} / ${fmt(r.total)} fotoğrafta yüzler tarandı. Kalanlar arka planda taranır (ya da "Yüzleri şimdi tara").`:
      `${fmt(r.people.length)} kişi · tüm fotoğraflar tarandı. Bir kişiye tıkla, isim ver; aynı kişi iki kez çıktıysa "Aynı kişileri birleştir".`);
   $('#pplBarW').classList.toggle('hide',!st.running);$('#pplBar').style.width=(st.todo?st.done/st.todo*100:0)+'%';
