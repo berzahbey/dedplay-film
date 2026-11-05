@@ -143,8 +143,8 @@ def _build_row(path, st, meta):
             taken.strftime("%Y-%m-%d %H:%M:%S"), src, lat, lon, w, h, dur)
 
 
-def _walk():
-    for root in MEDIA_DIRS:
+def _walk(roots=None):
+    for root in roots or MEDIA_DIRS:
         if not os.path.isdir(root):
             continue
         for d, dirs, files in os.walk(root):
@@ -162,6 +162,43 @@ def _orient_item(args):
     mid, path, dur = args
     b, a = check_video(path, dur)
     return mid, b, a
+
+
+def _source_pass():
+    """Kamera bilgisi (Make/Model) ve ekran görüntüsü işaretleri → kaynak türü (ekran / kaydedilen / kamera)."""
+    from .sources import classify
+    with db.db() as con:
+        rows = [dict(r) for r in con.execute(
+            "SELECT id,path,kind,width,height,lat FROM media WHERE src_checked IS NULL")]
+    if not rows:
+        return
+    state["phase"] = "Ekran görüntüleri ve kaydedilen dosyalar ayırt ediliyor"
+    state["todo"], state["done"] = len(rows), 0
+    for i in range(0, len(rows), 300):
+        part = rows[i:i + 300]
+        with tempfile.NamedTemporaryFile("w", suffix=".args", delete=False, encoding="utf-8") as f:
+            f.write("\n".join(r["path"] for r in part))
+            argfile = f.name
+        try:
+            out = subprocess.run(["exiftool", "-json", "-fast", "-q", "-q", "-charset", "filename=utf8",
+                                  "-Make", "-Model", "-Software", "-UserComment", "-AndroidMake", "-AndroidModel",
+                                  "-@", argfile], capture_output=True, timeout=900).stdout
+            meta = {m["SourceFile"]: m for m in json.loads(out or b"[]")}
+        except Exception:
+            meta = {}
+        finally:
+            os.unlink(argfile)
+        upd = []
+        for r in part:
+            m = meta.get(r["path"], {})
+            r["make"] = str(m.get("Make") or m.get("AndroidMake") or "")[:60]
+            r["model"] = str(m.get("Model") or m.get("AndroidModel") or "")[:60]
+            r["software"] = str(m.get("Software") or "")[:80]
+            r["ucomment"] = str(m.get("UserComment") or "")[:80]
+            upd.append((r["make"], r["model"], r["software"], r["ucomment"], classify(r), r["id"]))
+        with db.db() as con:
+            con.executemany("UPDATE media SET make=?,model=?,software=?,ucomment=?,src=?,src_checked=1 WHERE id=?", upd)
+        state["done"] += len(part)
 
 
 def dedupe_all():
@@ -189,15 +226,21 @@ def _analyze_ids(pool, items):
     state["analyzed"] += len(res)
 
 
-def _scan():
+def _under(p, roots):
+    return any(p == r or p.startswith(r.rstrip("/") + "/") for r in roots)
+
+
+def _scan(roots=None):
     state.update(running=True, phase="Dosyalar listeleniyor", found=0, done=0, todo=0, new=0,
                  removed=0, analyzed=0, started=time.time(), finished=None, error=None)
     workers = int(os.environ.get("ANALYZE_WORKERS", max(1, (os.cpu_count() or 2) // 2)))
     try:
         with db.db() as con:
             known = {r["path"]: (r["size"], r["mtime"]) for r in con.execute("SELECT path,size,mtime FROM media")}
+        if roots:  # sadece belirli klasörler taranıyor (ör. Gelen kutusu)
+            known = {p: v for p, v in known.items() if _under(p, roots)}
         seen, todo = set(), []
-        for p in _walk():
+        for p in _walk(roots):
             seen.add(p)
             state["found"] += 1
             try:
@@ -259,6 +302,7 @@ def _scan():
                         con.executemany("UPDATE media SET meta_rot=?, auto_rot=COALESCE(auto_rot, ?) WHERE id=?",
                                         [(b, a, mid) for mid, b, a in res])
                     state["done"] += len(part)
+        _source_pass()
         state["phase"] = "Kopyalar ayıklanıyor"
         dedupe_all()
         state["phase"] = "Tamamlandı"
@@ -278,3 +322,11 @@ def start():
     _thread = threading.Thread(target=_scan, daemon=True)
     _thread.start()
     return True
+
+
+def scan_now(roots=None):
+    """Taramayı bu iş parçacığında çalıştırır ve bitmesini bekler (düzenleyici kullanır)."""
+    while state["running"]:
+        time.sleep(2)
+    state["running"] = True
+    _scan(roots)

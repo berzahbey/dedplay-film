@@ -3,287 +3,323 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Dedplay Film</title>
+<title>Dedplay Arşiv</title>
 <style>
-:root{--bg:#0f1115;--card:#171a21;--line:#262b36;--tx:#e9ebf0;--mu:#8b93a5;--ac:#e8b24a;--ac2:#f5c96d;--ok:#4cc38a;--bad:#e5484d}
+:root{--bg:#0f1115;--card:#171a21;--line:#262b36;--tx:#e9ebf0;--mu:#8b93a5;--ac:#e8b24a;--ac2:#f5c96d;--ok:#4cc38a;--bad:#e5484d;--sel:#4c8dff}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
-header{display:flex;align-items:center;gap:16px;padding:18px 24px;border-bottom:1px solid var(--line);position:sticky;top:0;background:rgba(15,17,21,.92);backdrop-filter:blur(8px);z-index:5;flex-wrap:wrap}
-h1{font-size:20px;margin:0;letter-spacing:.3px}h1 span{color:var(--ac)}
-.pill{background:var(--card);border:1px solid var(--line);border-radius:999px;padding:6px 14px;color:var(--mu);font-size:13px}
-main{max-width:1200px;margin:0 auto;padding:24px 16px 80px;display:grid;gap:20px}
+header{display:flex;align-items:center;gap:14px;padding:14px 22px;border-bottom:1px solid var(--line);position:sticky;top:0;background:rgba(15,17,21,.94);backdrop-filter:blur(8px);z-index:20;flex-wrap:wrap}
+h1{font-size:20px;margin:0}h1 span{color:var(--ac)}
+nav{display:flex;gap:4px;background:#0b0d11;padding:4px;border-radius:10px;flex-wrap:wrap}
+nav button{background:none;border:0;color:var(--mu);padding:8px 14px;border-radius:7px;cursor:pointer;font:inherit}
+nav button.on{background:var(--line);color:var(--tx)}
+nav a{color:var(--mu);padding:8px 12px;text-decoration:none;font-size:14px}
+.pill{background:var(--card);border:1px solid var(--line);border-radius:999px;padding:6px 14px;color:var(--mu);font-size:13px;margin-left:auto}
+main{max-width:1250px;margin:0 auto;padding:22px 16px 80px;display:grid;gap:18px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px}
-.card h2{margin:0 0 14px;font-size:17px;display:flex;gap:10px;align-items:center}
-.card h2 .n{background:var(--ac);color:#111;border-radius:50%;width:24px;height:24px;display:inline-grid;place-items:center;font-size:13px}
-.row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
-.tabs{display:flex;gap:4px;background:#0f1115;padding:4px;border-radius:10px;width:fit-content;margin-bottom:14px}
-.tabs button{background:none;border:0;color:var(--mu);padding:7px 16px;border-radius:7px;cursor:pointer;font:inherit}
-.tabs button.on{background:var(--line);color:var(--tx)}
-button.btn{background:var(--ac);color:#15120a;border:0;border-radius:9px;padding:10px 18px;font-weight:600;font-size:15px;font-family:inherit;cursor:pointer}
-button.btn:hover{background:var(--ac2)}button.btn:disabled{opacity:.4;cursor:default}
-button.ghost{background:none;border:1px solid var(--line);color:var(--tx);border-radius:9px;padding:8px 14px;cursor:pointer;font:inherit}
-input,select{background:#0f1115;border:1px solid var(--line);color:var(--tx);border-radius:8px;padding:8px 10px;font:inherit}
-input[type=range]{padding:0}
-label.f{display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--mu)}
-.chips{display:flex;gap:8px;flex-wrap:wrap}
-.chip{border:1px solid var(--line);background:#0f1115;border-radius:10px;padding:8px 14px;cursor:pointer;text-align:left}
-.chip b{display:block;font-size:17px;color:var(--tx)}.chip small{color:var(--mu)}
-.chip.on{border-color:var(--ac);background:#2a2214}
-.seg{display:flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
-.seg button{background:#0f1115;border:0;border-right:1px solid var(--line);color:var(--mu);padding:8px 13px;cursor:pointer;font:inherit}
-.seg button:last-child{border:0}.seg button.on{background:var(--ac);color:#15120a;font-weight:600}
-.stats{color:var(--mu);font-size:14px;margin-bottom:12px}.stats b{color:var(--tx)}
-.chap{margin-top:18px}.chap h3{font-size:15px;margin:0 0 8px;display:flex;gap:10px;align-items:baseline}
-.chap h3 small{color:var(--mu);font-weight:400}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:6px}
-.th{position:relative;aspect-ratio:1;border-radius:7px;overflow:hidden;background:#0f1115;cursor:pointer}
-.th img{width:100%;height:100%;object-fit:cover;display:block;transition:.15s}
-.th .b{position:absolute;right:5px;bottom:5px;background:rgba(0,0,0,.7);font-size:11px;padding:1px 6px;border-radius:5px}
-.th.off img{opacity:.18;filter:grayscale(1)}
-.th.off::after{content:"✕";position:absolute;inset:0;display:grid;place-items:center;font-size:30px;color:var(--bad)}
+.card h2{margin:0 0 12px;font-size:17px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .muted{color:var(--mu);font-size:13px}
-.ml{max-height:280px;overflow:auto;border:1px solid var(--line);border-radius:10px}
-.ml label{display:flex;gap:10px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line);cursor:pointer}
-.ml label:last-child{border:0}.ml label span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ml button{background:none;border:0;color:var(--ac);cursor:pointer;font-size:15px}
-.job{border:1px solid var(--line);border-radius:10px;padding:14px;display:grid;gap:8px}
-.bar{height:7px;background:#0f1115;border-radius:9px;overflow:hidden}.bar i{display:block;height:100%;background:var(--ac);transition:width .5s}
-.st{font-size:12px;padding:2px 9px;border-radius:99px;background:var(--line)}
-button.ghost.del{color:var(--bad);border-color:#5a2226;font-size:13px;padding:5px 12px}.rotb{position:absolute;top:5px;right:5px;width:28px;height:28px;border-radius:50%;border:0;background:rgba(0,0,0,.65);color:#fff;font-size:16px;cursor:pointer;opacity:0;transition:.15s}.th:hover .rotb{opacity:1}.rb{top:5px;bottom:auto!important;left:5px;right:auto!important;background:#2a2214!important;color:var(--ac)}@media (hover:none){.rotb{opacity:.85}}.selbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:4px}.selbar button{font-size:13px;padding:6px 12px}button.ghost.mini{font-size:12px;padding:3px 10px;margin-left:auto}.chap h3{align-items:center}.th{user-select:none}.st.bitti{background:#163d2b;color:var(--ok)}.st.hata{background:#3d1618;color:var(--bad)}
-video{width:100%;max-width:720px;border-radius:10px;background:#000}
+button.btn{background:var(--ac);color:#15120a;border:0;border-radius:9px;padding:11px 20px;font-weight:700;font-size:15px;font-family:inherit;cursor:pointer}
+button.btn:hover{background:var(--ac2)}button:disabled{opacity:.4;cursor:default}
+button.btn.red{background:var(--bad);color:#fff}
+button.ghost{background:none;border:1px solid var(--line);color:var(--tx);border-radius:9px;padding:8px 14px;cursor:pointer;font:inherit;font-size:14px}
+button.ghost.red{color:var(--bad);border-color:#5a2226}
+.big{font-size:28px;font-weight:800}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin:12px 0}
+.stat{background:#0f1115;border:1px solid var(--line);border-radius:10px;padding:12px}
+.stat b{display:block;font-size:22px}.stat span{color:var(--mu);font-size:13px}
+.bar{height:8px;background:#0f1115;border-radius:9px;overflow:hidden;margin-top:8px}.bar i{display:block;height:100%;background:var(--ac);transition:width .5s}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{border:1px solid var(--line);background:#0f1115;color:var(--tx);border-radius:9px;padding:6px 12px;cursor:pointer;font:inherit;font-size:13px}
+.chip.on{border-color:var(--ac);background:#2a2214}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px}
+.th{position:relative;aspect-ratio:1;border-radius:8px;overflow:hidden;background:#0b0d11;cursor:pointer;user-select:none;border:3px solid transparent}
+.th img{width:100%;height:100%;object-fit:cover;display:block}
+.th .b{position:absolute;left:5px;bottom:5px;background:rgba(0,0,0,.72);font-size:11px;padding:1px 6px;border-radius:5px}
+.th .tr{position:absolute;right:5px;top:5px;display:flex;gap:4px;opacity:0;transition:.15s}
+.th:hover .tr{opacity:1}@media (hover:none){.th .tr{opacity:.9}}
+.th .tr button{width:28px;height:28px;border-radius:50%;border:0;background:rgba(0,0,0,.7);color:#fff;cursor:pointer;font-size:14px}
+.th.sel{border-color:var(--sel)}.th.sel::after{content:"✓";position:absolute;left:6px;top:4px;background:var(--sel);color:#fff;border-radius:50%;width:22px;height:22px;display:grid;place-items:center;font-size:13px}
+.group{border:1px solid var(--line);border-radius:12px;padding:12px;margin-top:10px}
+.group.skip{opacity:.45}
+.group .gh{display:flex;gap:10px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
+.tag{font-size:12px;padding:2px 9px;border-radius:99px;background:var(--line)}
+.ggrid{display:flex;gap:8px;overflow-x:auto}
+.gm{width:150px;flex:0 0 auto;cursor:pointer}
+.gm .th{border-color:#5a2226}.gm.keep .th{border-color:var(--ok)}.gm.lock .th{border-color:#3a6ea5}
+.gm small{display:block;color:var(--mu);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lbl{position:absolute;right:5px;bottom:5px;font-size:11px;padding:1px 7px;border-radius:5px;background:#5a2226}
+.keep .lbl{background:#163d2b;color:var(--ok)}.lock .lbl{background:#1b3350;color:#9cc3ff}
 .hide{display:none!important}
-a{color:var(--ac)}
+.lb{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:50;display:grid;place-items:center}
+.lb img,.lb video{max-width:94vw;max-height:86vh;border-radius:6px}
+.lb .x{position:fixed;top:14px;right:18px;font-size:26px;background:none;border:0;color:#fff;cursor:pointer}
+.lb .nv{position:fixed;top:50%;font-size:40px;background:none;border:0;color:#fff;cursor:pointer;padding:20px}
+.lb .cap{position:fixed;bottom:14px;left:0;right:0;text-align:center;color:#ccd;font-size:13px}
+.flist label{display:flex;gap:10px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--line)}
+.sticky{position:sticky;top:70px;z-index:10;background:var(--card);padding:10px 0;margin:-10px 0 6px}
 </style>
 </head>
 <body>
 <header>
-  <h1>Dedplay <span>Film</span></h1>
-  <div class="pill" id="arch">Arşiv yükleniyor…</div>
-  <button class="ghost" id="scanBtn">Arşivi tara</button>
+  <h1>Dedplay <span>Arşiv</span></h1>
+  <nav id="tabs">
+    <button data-t="clean" class="on">🧹 Temizle &amp; Düzenle</button>
+    <button data-t="photos">🖼 Tüm resimler</button>
+    <button data-t="videos">🎬 Tüm videolar</button>
+    <button data-t="other">📱 Ekran &amp; kaydedilenler</button>
+    <button data-t="trash">🗑 Çöp kutusu <span id="trashN"></span></button>
+    <button data-t="settings">⚙ Ayarlar</button>
+    <a href="/film">Film (deneysel)</a>
+  </nav>
+  <div class="pill" id="pill">…</div>
 </header>
-<main>
 
-<section class="card">
-  <h2><span class="n">1</span>Ne filme dönüşsün?</h2>
-  <div class="tabs" id="srcTabs">
-    <button data-t="year" class="on">Yıl</button><button data-t="range">Tarih aralığı</button><button data-t="folder">Klasör</button>
+<main>
+<!-- ============ TEMİZLE ============ -->
+<section id="v-clean">
+  <div class="card">
+    <h2>Kopyaları temizle ve arşivi düzenle</h2>
+    <div class="muted" id="howto"></div>
+    <div class="row" style="margin-top:14px">
+      <button class="btn" id="findBtn">1 · Kopyaları bul</button>
+      <button class="ghost" id="inboxBtn" title="Gelen klasöründeki yeni dosyaları beklemeden işle">Gelen klasörünü şimdi işle</button>
+      <label class="row muted"><input type="checkbox" id="bursts" checked> Seri çekimleri de say (art arda çekilmiş neredeyse aynı kareler)</label>
+    </div>
+    <div id="prog" class="hide" style="margin-top:14px"><div id="progTxt" class="muted"></div><div class="bar"><i id="progBar" style="width:0"></i></div></div>
   </div>
-  <div id="t-year"><div class="chips" id="years"><span class="muted">Önce arşivi tara.</span></div></div>
-  <div id="t-range" class="hide row">
-    <label class="f">Başlangıç<input type="date" id="dStart"></label>
-    <label class="f">Bitiş<input type="date" id="dEnd"></label>
-  </div>
-  <div id="t-folder" class="hide row">
-    <label class="f" style="min-width:320px">Klasör<select id="folderSel"></select></label>
-  </div>
-  <div style="margin-top:18px">
-    <div class="muted" style="margin-bottom:6px">Stil</div>
-    <div class="chips" id="styleSel">
-      <button class="chip" data-s="sade" data-p="3.5"><b>Sade</b><small>Yumuşak geçişler, doğal renkler</small></button>
-      <button class="chip on" data-s="sinematik" data-p="4"><b>Sinematik</b><small>Film tonu, kenar karartma, ağır tempo</small></button>
-      <button class="chip" data-s="enerjik" data-p="2.5"><b>Enerjik</b><small>Canlı renkler, hızlı ritim, hareketli geçişler</small></button>
+
+  <div class="card hide" id="sumCard">
+    <h2>Bulunanlar</h2>
+    <div class="stats" id="stats"></div>
+    <div class="row">
+      <button class="btn" id="applyBtn">2 · Onayla: kopyaları çöpe at ve düzenle</button>
+      <span class="muted">Hiçbir şey kalıcı silinmez; çöp kutusundan geri alabilirsin.</span>
     </div>
   </div>
-  <div class="row" style="margin-top:18px;align-items:flex-end">
-    <label class="f" style="flex:1;min-width:240px">Film adı<input id="title" placeholder="ör. 2025 – Yılımız"></label>
-    <label class="f">Film süresi
-      <div class="seg" id="durSeg">
-        <button data-m="5">5 dk</button><button data-m="10">10 dk</button><button data-m="15" class="on">15 dk</button><button data-m="20">20 dk</button><button data-m="30">30 dk</button><button data-m="0">Hepsi</button>
+
+  <div class="card hide" id="grpCard">
+    <h2>Kopya grupları <span class="muted" style="font-weight:400">— isteğe bağlı kontrol: başka bir kareyi tıklarsan o kalır; "Atla" o gruba dokunmaz</span></h2>
+    <div class="chips" id="reasonChips"></div>
+    <div id="groups"></div>
+    <div class="row" style="margin-top:12px"><button class="ghost" id="moreGroups">Daha fazla göster</button></div>
+  </div>
+
+  <div class="card">
+    <h2>Son düzenlemeler</h2>
+    <div id="moves" class="muted">Henüz düzenleme yapılmadı.</div>
+  </div>
+</section>
+
+<!-- ============ KÜTÜPHANE ============ -->
+<section id="v-lib" class="hide">
+  <div class="card">
+    <h2 id="libTitle"></h2>
+    <div class="chips" id="years"></div>
+    <div class="muted" id="libInfo" style="margin:10px 0"></div>
+    <div class="grid" id="libGrid"></div>
+    <div class="row" style="margin-top:12px"><button class="ghost" id="libMore">Daha fazla</button></div>
+  </div>
+</section>
+
+<!-- ============ ÇÖP ============ -->
+<section id="v-trash" class="hide">
+  <div class="card">
+    <h2>Çöp kutusu</h2>
+    <div class="muted" id="trashInfo"></div>
+    <div class="chips" id="batches" style="margin:10px 0"></div>
+    <div class="sticky">
+      <div class="row">
+        <button class="ghost" id="tAll">☑ Hepsini seç</button>
+        <button class="ghost" id="tNone">☐ Seçimi kaldır</button>
+        <span class="muted" id="tSel">0 seçili</span>
+        <span style="flex:1"></span>
+        <button class="btn" id="tRestoreSel" disabled>↩ Seçilenleri geri al</button>
+        <button class="btn red" id="tDeleteSel" disabled>Seçilenleri kalıcı sil</button>
       </div>
-    </label>
-    <label class="f">Fotoğraf (sn)<input type="number" id="photoSec" value="4" min="2" max="8" step="0.5" style="width:80px"></label>
-    <label class="f">Video kesiti (sn)<input type="number" id="videoSec" value="7" min="3" max="30" step="1" style="width:80px"></label>
-    <button class="btn" id="planBtn">Kareleri seç</button>
+      <div class="row" style="margin-top:8px">
+        <button class="ghost" id="tRestoreAll">↩ Tümünü geri al</button>
+        <button class="ghost red" id="tDeleteAll">Tümünü kalıcı sil</button>
+        <span class="muted">İpucu: tıkla = seç · basılı tutup kaydır = çoklu seç · Shift+tıkla = aralık · üzerine gelince ↩ geri al, 🗑 kalıcı sil</span>
+      </div>
+    </div>
+    <div class="grid" id="trashGrid"></div>
+    <div class="row" style="margin-top:12px"><button class="ghost" id="trashMore">Daha fazla</button></div>
   </div>
 </section>
 
-<section class="card hide" id="prevCard">
-  <h2><span class="n">2</span>Önizleme</h2>
-  <div class="stats" id="stats"></div>
-  <div class="selbar">
-    <button class="ghost" data-a="none">☐ Hepsini kaldır</button>
-    <button class="ghost" data-a="all">☑ Hepsini seç</button>
-    <button class="ghost" data-a="inv">⇄ Tersine çevir</button>
-    <button class="ghost" data-a="videos">▶ Sadece videolar</button>
-    <button class="ghost" data-a="photos">▣ Sadece fotoğraflar</button>
-    <span class="muted" id="selInfo"></span>
+<!-- ============ AYARLAR ============ -->
+<section id="v-settings" class="hide">
+  <div class="card">
+    <h2>Olduğu gibi kalacak klasörler</h2>
+    <div class="muted">İşaretli klasörlerdeki dosyalar taşınmaz ve asla çöpe atılmaz. Başka yerde kopyaları varsa onlar çöpe gider, bu klasördeki kalır.</div>
+    <div class="flist" id="folders" style="margin-top:10px"></div>
+    <div class="row" style="margin-top:12px"><button class="btn" id="saveProt">Kaydet</button><span class="muted" id="saveInfo"></span></div>
   </div>
-  <div class="muted" style="margin:6px 0 4px">İpucu: Yan ya da ters duran bir kare varsa üzerine gelip ↻ ile döndür · Tıkla = seç/kaldır · Basılı tutup kaydır = birden fazla kareyi boya · Shift + tıkla = aradaki her şey. Sadece istediklerini yapmak için önce "Hepsini kaldır"a bas, sonra istediklerini seç.</div>
-  <div id="chapters"></div>
-</section>
-
-<section class="card hide" id="musicCard">
-  <h2><span class="n">3</span>Müzik ve ses</h2>
-  <div class="row" style="margin-bottom:10px">
-    <label class="f">Müzik klasörü<select id="musicDir"></select></label>
-    <button class="ghost" id="mAll">Hepsini seç</button><button class="ghost" id="mNone">Temizle</button>
-    <span class="muted" id="mCount"></span>
+  <div class="card">
+    <h2>Otomatik düzen</h2>
+    <label class="row"><input type="checkbox" id="auto"> Gelen klasörünü sürekli işle (5 dakikada bir) ve 6 saatte bir tüm arşive bak</label>
+    <div class="muted" id="autoInfo" style="margin-top:8px"></div>
   </div>
-  <div class="ml" id="musicList"></div>
-  <audio id="player" class="hide" controls style="width:100%;margin-top:8px"></audio>
-  <div class="row" style="margin-top:14px">
-    <label class="f">Müzik sesi <input type="range" id="mVol" min="0.2" max="1.2" step="0.05" value="0.8"></label>
-    <label class="row"><input type="checkbox" id="vAudio" checked> Videoların kendi sesi (konuşurken müzik kısılır)</label>
-    <label class="row"><input type="checkbox" id="chTitles" checked> Bölüm başlıkları</label>
-    <label class="row"><input type="checkbox" id="beatSync" checked> Kareleri müziğin ritmine göre değiştir</label>
-    <label class="row"><input type="checkbox" id="letterbox"> Sinema bantları (üst-alt siyah şerit)</label>
-  </div>
-  <div class="row" style="margin-top:18px">
-    <button class="btn" id="renderBtn">🎬 Filmi oluştur</button>
-    <span class="muted" id="renderInfo"></span>
-  </div>
-</section>
-
-<section class="card">
-  <h2><span class="n">4</span>Filmlerim</h2>
-  <div id="jobs" style="display:grid;gap:12px"><span class="muted">Henüz film yok.</span></div>
 </section>
 </main>
 
+<div class="lb hide" id="lb"><button class="x" id="lbX">✕</button><button class="nv" id="lbP" style="left:0">‹</button><div id="lbC"></div><button class="nv" id="lbN" style="right:0">›</button><div class="cap" id="lbCap"></div></div>
+
 <script>
-const $=s=>document.querySelector(s), api=(u,o)=>fetch(u,o).then(async r=>{const t=await r.text();let j=null;try{j=JSON.parse(t)}catch(e){}
-  if(!r.ok)throw new Error((j&&j.detail)||`Sunucu hatası ${r.status}: ${t.slice(0,200)}`);if(j===null)throw new Error('Sunucudan beklenmeyen cevap');return j});
-const post=(u,b)=>api(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});
-const AY=["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
-let style='sinematik', src='year', sel={}, folders=[], minutes=15, PLAN=null, off=new Set(), music=new Set();
-const fmt=n=>n.toLocaleString('tr-TR');
-const mmss=s=>{s=Math.round(s);const m=Math.floor(s/60);return m?`${m} dk ${String(s%60).padStart(2,'0')} sn`:`${s} sn`};
+const $=s=>document.querySelector(s);
+const api=(u,o)=>fetch(u,o).then(async r=>{const t=await r.text();let j=null;try{j=JSON.parse(t)}catch(e){}
+  if(!r.ok)throw new Error((j&&j.detail)||`Sunucu hatası ${r.status}`);return j});
+const post=(u,b)=>api(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b||{})});
+const fmt=n=>(n||0).toLocaleString('tr-TR');
+const gb=b=>b>1e9?(b/1e9).toFixed(1)+' GB':(b/1e6).toFixed(0)+' MB';
+let tab='clean', ST=null;
 
-// --- arşiv durumu
-async function refreshStatus(){
-  const s=await api('/api/status'); const sc=s.scan;
-  let t=`${fmt(s.photos)} fotoğraf · ${fmt(s.videos)} video`;
-  if(sc.running){const pct=sc.todo?Math.round(sc.done/sc.todo*100):0;t=`⏳ ${sc.phase}… ${sc.todo?pct+'%':fmt(sc.found)+' dosya'}`}
-  else if(s.pending_analysis) t+=` · ${fmt(s.pending_analysis)} analiz bekliyor`;
-  if(s.duplicates) t+=` · ${fmt(s.duplicates)} kopya ayıklandı`;
-  if(sc.running){refreshStatus.n=(refreshStatus.n||0)+1; if(refreshStatus.n%7==0) loadArchive()}
-  if(sc.error) t+=' · Hata: '+sc.error;
-  $('#arch').textContent=t; $('#scanBtn').disabled=sc.running;
-  if(!sc.running && refreshStatus.wasRunning) loadArchive();
-  refreshStatus.wasRunning=sc.running;
+// ---- sekmeler
+$('#tabs').onclick=e=>{const t=e.target.closest('button')?.dataset.t;if(!t)return;tab=t;
+  document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t==t));
+  $('#v-clean').classList.toggle('hide',t!='clean');$('#v-lib').classList.toggle('hide',!(t=='photos'||t=='videos'||t=='other'));
+  $('#v-trash').classList.toggle('hide',t!='trash');$('#v-settings').classList.toggle('hide',t!='settings');
+  if(t=='photos'||t=='videos'||t=='other')openLib({photos:'photo',videos:'video',other:'other'}[t]);if(t=='trash')loadTrash(true);if(t=='settings')loadSettings()};
+
+// ---- durum
+async function status(){
+  try{ST=await api('/api/clean/status')}catch(e){return}
+  const s=ST.settings, run=ST.running;
+  $('#pill').textContent=run?`⏳ ${ST.phase}`:(s.auto?'Otomatik düzen açık':'Otomatik düzen kapalı');
+  $('#trashN').textContent=ST.trash.files?`(${fmt(ST.trash.files)})`:'';
+  $('#howto').innerHTML=`Program tüm arşivi tarar. Birebir aynı dosyaları, farklı ad/boyuttaki aynı görüntüleri${$('#bursts').checked?' ve seri çekimleri':''} bulur ve her grupta <b>en iyisini</b> bırakır (gerçek çekim tarihi, en yüksek çözünürlük, en net, gözleri açık olan). Diğerleri <b>çöp kutusuna</b> gider. Sonra kalan her şey <b>${s.photos_dir}/&lt;yıl&gt;</b> ve <b>${s.videos_dir}/&lt;yıl&gt;</b> klasörlerine yerleşir. Ekran görüntüleri, ekran kayıtları ve WhatsApp/Instagram/TikTok/TV gibi başka yerlerden kaydedilenler ayrıca <b>${s.other_dir}</b> klasörüne gider.<br>Olduğu gibi kalacak klasörler: <b>${s.protected.join(', ')||'yok'}</b> (Ayarlar'dan değiştir). Yeni dosyaları <b>${s.inbox}</b> klasörüne at; otomatik işlenir.`;
+  $('#findBtn').disabled=$('#inboxBtn').disabled=run;$('#applyBtn').disabled=run||!ST.summary.files;
+  $('#prog').classList.toggle('hide',!run&&!ST.error);
+  const pct=ST.todo?Math.round(ST.done/ST.todo*100):0;
+  $('#progTxt').textContent=ST.error?'Hata: '+ST.error:(run?`${ST.phase}${ST.todo?` — ${fmt(ST.done)} / ${fmt(ST.todo)}`:''}`:'');
+  if(run&&ST.scan&&ST.scan.running&&ST.phase.startsWith('Arşiv'))$('#progTxt').textContent=`Arşiv taranıyor — ${ST.scan.phase} ${ST.scan.todo?fmt(ST.scan.done)+' / '+fmt(ST.scan.todo):''}`;
+  $('#progBar').style.width=(run?pct:0)+'%';
+  drawSummary();
+  if(status.was&&!run){loadGroups(true);loadMoves();if(tab=='trash')loadTrash(true)}
+  status.was=run;
 }
-$('#scanBtn').onclick=async()=>{await post('/api/scan',{});refreshStatus()};
-
-async function loadArchive(){
-  const ys=await api('/api/years');
-  $('#years').innerHTML=ys.length?ys.map(y=>`<button class="chip" data-y="${y.year}"><b>${y.year}</b><small>${fmt(y.photos)} foto · ${fmt(y.videos)} video</small></button>`).join(''):'<span class="muted">Arşiv boş. "Arşivi tara"ya bas.</span>';
-  document.querySelectorAll('#years .chip').forEach(c=>c.onclick=()=>{
-    document.querySelectorAll('#years .chip').forEach(x=>x.classList.remove('on'));c.classList.add('on');
-    sel={start:c.dataset.y+'-01-01',end:c.dataset.y+'-12-31'}; $('#title').value=c.dataset.y+' – Yılımız';
-  });
-  folders=await api('/api/folders');
-  $('#folderSel').innerHTML='<option value="">— seç —</option>'+folders.map((f,i)=>`<option value="${i}">${f.label} (${fmt(f.count)})</option>`).join('');
+function drawSummary(){
+  const m=ST.summary; $('#sumCard').classList.toggle('hide',!m.groups);$('#grpCard').classList.toggle('hide',!m.groups);
+  if(!m.groups)return;
+  $('#stats').innerHTML=`<div class="stat"><b>${fmt(m.files)}</b><span>dosya çöpe gidecek</span></div>
+    <div class="stat"><b>${gb(m.bytes)}</b><span>yer açılacak</span></div>
+    <div class="stat"><b>${fmt(m.groups)}</b><span>kopya grubu (her birinden 1 tane kalır)</span></div>
+    <div class="stat"><b>${fmt(m.photos)} / ${fmt(m.videos)}</b><span>fotoğraf / video</span></div>
+    <div class="stat"><b>${fmt(m.by_reason['birebir aynı'])}</b><span>birebir aynı</span></div>
+    <div class="stat"><b>${fmt(m.by_reason['aynı görüntü'])}</b><span>aynı görüntü, farklı boyut/ad</span></div>
+    <div class="stat"><b>${fmt(m.by_reason['seri çekim'])}</b><span>seri çekim</span></div>`;
 }
-$('#folderSel').onchange=e=>{const f=folders[e.target.value];if(f){sel={start:f.from.slice(0,10),end:f.to.slice(0,10),folder:f.path};$('#title').value=f.label.split('/').pop()}};
-['dStart','dEnd'].forEach(id=>$('#'+id).onchange=()=>{sel={start:$('#dStart').value,end:$('#dEnd').value||$('#dStart').value}});
-$('#srcTabs').onclick=e=>{const t=e.target.dataset.t;if(!t)return;src=t;sel={};
-  document.querySelectorAll('#srcTabs button').forEach(b=>b.classList.toggle('on',b.dataset.t==t));
-  ['year','range','folder'].forEach(x=>$('#t-'+x).classList.toggle('hide',x!=t))};
-$('#styleSel').onclick=e=>{const c=e.target.closest('.chip');if(!c)return;style=c.dataset.s;$('#photoSec').value=c.dataset.p;
-  document.querySelectorAll('#styleSel .chip').forEach(x=>x.classList.toggle('on',x===c));updInfo()};
-$('#durSeg').onclick=e=>{const m=e.target.dataset.m;if(m===undefined)return;minutes=+m;
-  document.querySelectorAll('#durSeg button').forEach(b=>b.classList.toggle('on',b===e.target))};
+$('#inboxBtn').onclick=async()=>{await post('/api/clean/inbox');status()};
+$('#findBtn').onclick=async()=>{await post('/api/clean/find',{include_bursts:$('#bursts').checked});status()};
+$('#applyBtn').onclick=async()=>{const m=ST.summary;
+  if(!confirm(`${fmt(m.files)} dosya (${gb(m.bytes)}) çöp kutusuna taşınacak ve kalanlar Resimler/Videolar klasörlerine yerleştirilecek.\n\nÇöp kutusundan her zaman geri alabilirsin. Devam edilsin mi?`))return;
+  await post('/api/clean/apply');status()};
 
-// --- plan
-function segDur(it){const vs=+$('#videoSec').value,d=it.duration||0;
-  if(it.kind=='photo')return +$('#photoSec').value; if(d<=vs+1.5)return Math.max(d,1); return d>60?2*vs:vs}
-const TR={sade:.5,sinematik:.8,enerjik:.35};
-function estimate(){if(!PLAN)return 0;let s=8;for(const c of PLAN.chapters){const its=c.items.filter(i=>!off.has(i.id)&&i.role!='cutaway');if(its.length)s+=($('#chTitles').checked?3:0)+its.reduce((a,i)=>a+segDur(i)*(i.role=='pair'?.65:1)-TR[style],0)}return s}
-function updInfo(){const n=PLAN?PLAN.chapters.reduce((a,c)=>a+c.items.length,0)-off.size:0;
-  $('#renderInfo').textContent=PLAN?`${fmt(n)} kare · tahmini film süresi ${mmss(estimate())}`:''}
-
-$('#planBtn').onclick=async()=>{
-  if(!sel.start){alert('Önce bir yıl, tarih aralığı veya klasör seç.');return}
-  $('#planBtn').disabled=true;$('#planBtn').textContent='Seçiliyor…';
-  try{
-    PLAN=await post('/api/plan',{...sel,target_minutes:minutes,photo_sec:+$('#photoSec').value,video_sec:+$('#videoSec').value,title:$('#title').value||null,style});
-    off=new Set(); if(!$('#title').value)$('#title').value=PLAN.title; drawPlan();
-  }catch(e){alert('Hata: '+e.message)}
-  $('#planBtn').disabled=false;$('#planBtn').textContent='Kareleri seç';
-};
-// --- toplu seçim
-const allItems=()=>PLAN?PLAN.chapters.flatMap(c=>c.items):[];
-function setOff(id,v){v?off.add(id):off.delete(id);const t=document.querySelector(`.th[data-id="${id}"]`);if(t)t.classList.toggle('off',v)}
-function refreshSel(){const n=allItems().length;$('#selInfo').textContent=`${fmt(n-off.size)} / ${fmt(n)} kare seçili`;updInfo()}
-let paint=null,lastClick=null,moved=false;
-function bindSelection(){
-  const ths=[...document.querySelectorAll('.th')], order=ths.map(t=>+t.dataset.id);
-  document.querySelectorAll('.rotb').forEach(b=>{
-    b.onmousedown=e=>e.stopPropagation();
-    b.onclick=async e=>{e.stopPropagation();const id=+b.dataset.rid,it=allItems().find(x=>x.id==id);
-      try{const deg=(await post('/api/media/'+id+'/rotate',{step:90})).rot;it.rot=deg;it.rot_auto=false;
-        const th=b.closest('.th');th.querySelector('img').src=`/api/thumb/${id}?r=${deg}`;th.querySelector('.rb')?.remove()}
-      catch(err){alert('Döndürülemedi: '+err.message)}};
-  });
-  ths.forEach(t=>{
-    t.ondragstart=e=>e.preventDefault();
-    t.onmousedown=e=>{e.preventDefault();const id=+t.dataset.id;
-      if(e.shiftKey&&lastClick!==null){const a=order.indexOf(lastClick),b=order.indexOf(id),v=off.has(lastClick);
-        order.slice(Math.min(a,b),Math.max(a,b)+1).forEach(x=>setOff(x,v));refreshSel();return}
-      paint=!off.has(id);moved=false;setOff(id,paint);lastClick=id;refreshSel()};
-    t.onmouseenter=()=>{if(paint!==null){moved=true;setOff(+t.dataset.id,paint);refreshSel()}};
-  });
-  document.querySelectorAll('[data-ch]').forEach(b=>b.onclick=()=>{const its=PLAN.chapters[+b.dataset.ch].items;
-    const anyOn=its.some(i=>!off.has(i.id));its.forEach(i=>setOff(i.id,anyOn));refreshSel()});
-  refreshSel();
+// ---- gruplar
+let gOff=0, gReason='';
+async function loadGroups(reset){
+  if(reset){gOff=0;$('#groups').innerHTML=''}
+  const r=await api(`/api/clean/groups?offset=${gOff}&limit=30${gReason?'&reason='+encodeURIComponent(gReason):''}`);
+  $('#reasonChips').innerHTML=['','birebir aynı','aynı görüntü','seri çekim'].map(x=>`<button class="chip ${x==gReason?'on':''}" data-r="${x}">${x||'Hepsi'}</button>`).join('');
+  $('#groups').insertAdjacentHTML('beforeend',r.groups.map(groupHtml).join(''));
+  gOff+=r.groups.length;$('#moreGroups').classList.toggle('hide',gOff>=r.total);
 }
+function groupHtml(g){
+  return `<div class="group ${g.skip?'skip':''}" data-g="${g.gid}"><div class="gh"><span class="tag">${g.reason}</span><span class="muted">${g.kind=='photo'?'Fotoğraf':'Video'} · ${g.members.length} dosya · ${g.members[0].taken_at||''}</span><span style="flex:1"></span><button class="ghost skipb">${g.skip?'Atlamayı geri al':'Atla'}</button></div>
+  <div class="ggrid">${g.members.map(m=>{const k=m.id==g.keep,l=m.locked&&!k;return `<div class="gm ${k?'keep':''} ${l?'lock':''}" data-m="${m.id}" title="${m.folder}/${m.name}"><div class="th"><img loading="lazy" src="/api/thumb/${m.id}"><span class="lbl">${k?'Kalacak':l?'🔒 korunuyor':'Çöpe'}</span></div><small>${m.name}</small><small>${m.w||'?'}×${m.h||'?'} · ${gb(m.size)} · ${m.folder}</small></div>`}).join('')}</div></div>`;
+}
+$('#reasonChips').onclick=e=>{const r=e.target.dataset.r;if(r===undefined)return;gReason=r;loadGroups(true)};
+$('#moreGroups').onclick=()=>loadGroups(false);
+$('#groups').onclick=async e=>{const gEl=e.target.closest('.group');if(!gEl)return;const gid=+gEl.dataset.g;
+  if(e.target.classList.contains('skipb')){const g=await post('/api/clean/groups/'+gid,{skip:!gEl.classList.contains('skip')});gEl.outerHTML=groupHtml(g);status();return}
+  const m=e.target.closest('.gm');if(m){const g=await post('/api/clean/groups/'+gid,{keep:+m.dataset.m});gEl.outerHTML=groupHtml(g);status()}};
+
+async function loadMoves(){const r=await api('/api/moves');
+  $('#moves').innerHTML=r.length?r.map(b=>`<div class="row" style="padding:6px 0;border-bottom:1px solid var(--line)"><b>${b.batch}</b><span class="muted">${fmt(b.n)} dosya Resimler/Videolar'a taşındı${b.undone?` · ${fmt(b.undone)} geri alındı`:''}</span><span style="flex:1"></span>${b.undone<b.n?`<button class="ghost" data-undo="${b.batch}">Bu düzenlemeyi geri al</button>`:''}</div>`).join(''):'Henüz düzenleme yapılmadı.'}
+$('#moves').onclick=async e=>{const b=e.target.dataset.undo;if(!b)return;if(!confirm('Bu turda taşınan dosyalar eski klasörlerine geri dönsün mü? (Çöpe atılanlar için Çöp kutusunu kullan)'))return;
+  const r=await post('/api/moves/undo',{batch:b});alert(fmt(r.undone)+' dosya eski yerine döndü');loadMoves()};
+
+// ---- kütüphane
+let lib={kind:'photo',year:null,off:0,items:[]};
+async function openLib(kind){lib={kind,year:null,off:0,items:[]};
+  $('#libTitle').textContent={photo:'Tüm resimler',video:'Tüm videolar',other:'Ekran görüntüleri, ekran kayıtları ve başka yerlerden kaydedilenler'}[kind];
+  const ys=await api('/api/library/years?kind='+kind);
+  $('#years').innerHTML=`<button class="chip on" data-y="">Hepsi (${fmt(ys.reduce((a,y)=>a+y.n,0))})</button>`+ys.map(y=>`<button class="chip" data-y="${y.y}">${y.y} (${fmt(y.n)})</button>`).join('');
+  loadLib(true)}
+$('#years').onclick=e=>{const y=e.target.dataset.y;if(y===undefined)return;lib.year=y||null;
+  document.querySelectorAll('#years .chip').forEach(c=>c.classList.toggle('on',c===e.target));loadLib(true)};
+async function loadLib(reset){if(reset){lib.off=0;lib.items=[];$('#libGrid').innerHTML=''}
+  const r=await api(`/api/library?kind=${lib.kind}&offset=${lib.off}&limit=120${lib.year?'&year='+encodeURIComponent(lib.year):''}`);
+  const start=lib.items.length;lib.items.push(...r.items);lib.off+=r.items.length;
+  $('#libInfo').textContent=`${fmt(r.total)} ${{photo:'resim',video:'video',other:'dosya'}[lib.kind]}`;
+  $('#libGrid').insertAdjacentHTML('beforeend',r.items.map((i,k)=>`<div class="th" data-i="${start+k}" title="${i.folder}/${i.name}\n${i.taken_at}"><img loading="lazy" src="/api/thumb/${i.id}">${i.duration?`<span class="b">▶ ${Math.round(i.duration)} sn</span>`:''}</div>`).join(''));
+  $('#libMore').classList.toggle('hide',lib.off>=r.total)}
+$('#libMore').onclick=()=>loadLib(false);
+$('#libGrid').onclick=e=>{const t=e.target.closest('.th');if(t)lightbox(lib.items,+t.dataset.i,i=>'/api/media/'+i.id,lib.kind)};
+
+// ---- büyük görüntüleme
+let LB=null;
+function lightbox(items,idx,url,kind){LB={items,idx,url,kind};$('#lb').classList.remove('hide');showLB()}
+function showLB(){const it=LB.items[LB.idx],u=LB.url(it),vid=(it.kind||LB.kind)=='video';
+  $('#lbC').innerHTML=vid?`<video src="${u}" controls autoplay></video>`:`<img src="${u}">`;
+  $('#lbCap').textContent=`${(it.folder||'')}/${it.name||''} · ${it.taken_at||''} · ${LB.idx+1}/${LB.items.length}`}
+$('#lbX').onclick=()=>{$('#lb').classList.add('hide');$('#lbC').innerHTML=''};
+$('#lbP').onclick=()=>{if(LB.idx>0){LB.idx--;showLB()}};$('#lbN').onclick=()=>{if(LB.idx<LB.items.length-1){LB.idx++;showLB()}};
+document.addEventListener('keydown',e=>{if($('#lb').classList.contains('hide'))return;if(e.key=='Escape')$('#lbX').click();if(e.key=='ArrowLeft')$('#lbP').click();if(e.key=='ArrowRight')$('#lbN').click()});
+
+// ---- çöp kutusu
+let T={batch:null,off:0,items:[],sel:new Set(),last:null};
+async function loadTrash(reset){if(reset){T.off=0;T.items=[];T.sel.clear();$('#trashGrid').innerHTML=''}
+  const r=await api(`/api/trash?offset=${T.off}&limit=200${T.batch?'&batch='+encodeURIComponent(T.batch):''}`);
+  const tot=r.batches.reduce((a,b)=>a+b.n,0),bytes=r.batches.reduce((a,b)=>a+(b.bytes||0),0);
+  $('#trashInfo').textContent=tot?`${fmt(tot)} dosya · ${gb(bytes)} · kalıcı silinene kadar burada kalır`:'Çöp kutusu boş.';
+  $('#batches').innerHTML=r.batches.length?`<button class="chip ${!T.batch?'on':''}" data-b="">Hepsi</button>`+r.batches.map(b=>`<button class="chip ${b.batch==T.batch?'on':''}" data-b="${b.batch}">${b.batch} · ${fmt(b.n)}</button>`).join(''):'';
+  const start=T.items.length;T.items.push(...r.items);T.off+=r.items.length;
+  $('#trashGrid').insertAdjacentHTML('beforeend',r.items.map((i,k)=>`<div class="th" data-i="${start+k}" data-id="${i.id}" title="${i.folder}/${i.name}\n${i.reason} · kalan kopya: ${i.keeper}"><img loading="lazy" src="/api/trash/thumb/${i.id}"><span class="b">${i.reason}</span><div class="tr"><button data-a="view" title="Büyüt">⤢</button><button data-a="restore" title="Geri al">↩</button><button data-a="del" title="Kalıcı sil">🗑</button></div></div>`).join(''));
+  $('#trashMore').classList.toggle('hide',r.items.length<200);bindTrash();tsel()}
+function tsel(){$('#tSel').textContent=`${fmt(T.sel.size)} seçili`;$('#tRestoreSel').disabled=$('#tDeleteSel').disabled=!T.sel.size;
+  document.querySelectorAll('#trashGrid .th').forEach(t=>t.classList.toggle('sel',T.sel.has(+t.dataset.id)))}
+let paint=null;
+function bindTrash(){const ths=[...document.querySelectorAll('#trashGrid .th')],order=ths.map(t=>+t.dataset.id);
+  ths.forEach(t=>{t.ondragstart=e=>e.preventDefault();
+    t.onmousedown=e=>{if(e.target.closest('.tr'))return;e.preventDefault();const id=+t.dataset.id;
+      if(e.shiftKey&&T.last!==null){const a=order.indexOf(T.last),b=order.indexOf(id),v=T.sel.has(T.last);
+        order.slice(Math.min(a,b),Math.max(a,b)+1).forEach(x=>v?T.sel.add(x):T.sel.delete(x));tsel();return}
+      paint=!T.sel.has(id);paint?T.sel.add(id):T.sel.delete(id);T.last=id;tsel()};
+    t.onmouseenter=()=>{if(paint===null)return;const id=+t.dataset.id;paint?T.sel.add(id):T.sel.delete(id);tsel()}})}
 document.addEventListener('mouseup',()=>paint=null);
-document.querySelector('.selbar').onclick=e=>{const a=e.target.dataset.a;if(!a||!PLAN)return;
-  allItems().forEach(i=>setOff(i.id,a=='none'?true:a=='all'?false:a=='inv'?!off.has(i.id):a=='videos'?i.kind!='video':i.kind!='photo'));refreshSel()};
-function drawPlan(){
-  const s=PLAN.stats; $('#prevCard').classList.remove('hide');$('#musicCard').classList.remove('hide');
-  if(!PLAN.chapters.length){$('#stats').innerHTML='Bu aralıkta kare bulunamadı.';$('#chapters').innerHTML='';return}
-  $('#stats').innerHTML=`<b>${fmt(s.total)}</b> dosya bulundu · <b>${fmt(s.chosen)}</b> kare seçildi · ${fmt(s.duplicates)} benzer kare, ${fmt(s.blurry)} bulanık, ${fmt(s.filtered)} ekran görüntüsü/Live Photo elendi · ${PLAN.mode=='day'?'günlere':'aylara'} göre bölümlendi${s.cutaways?` · <b>${s.cutaways}</b> fotoğraf videolara ara plan oldu`:''}${s.pairs?` · ${s.pairs} ikili kare`:''}${PLAN.scan_running?'<br>⏳ Tarama sürüyor: şu ana kadar taranan dosyalarla seçildi. Tarama bitince tekrar "Kareleri seç"e basarsan yeni dosyalar da eklenir.':''}`;
-  $('#chapters').innerHTML=PLAN.chapters.map((c,ci)=>`<div class="chap"><h3>${c.title} <small>${c.subtitle} · ${c.items.length} kare</small><button class="ghost mini" data-ch="${ci}">bölümü seç / kaldır</button></h3><div class="grid">${
-    c.items.map(i=>`<div class="th" data-id="${i.id}" title="${i.name}\n${i.taken_at}"><img loading="lazy" src="/api/thumb/${i.id}?r=${i.rot||0}"><button class="rotb" data-rid="${i.id}" title="Yan ya da ters duruyorsa döndür (saat yönünde 90°)">↻</button>${i.rot_auto?'<span class="b rb" title="Yüzlere bakılarak otomatik döndürüldü">↻ oto</span>':''}${i.kind=='video'?`<span class="b">▶ ${Math.round(i.duration||0)} sn</span>`:''}${i.role=='cutaway'?'<span class="b" style="left:5px;right:auto">↳ ara plan</span>':''}${i.role=='pair'?'<span class="b" style="left:5px;right:auto">⧉ ikili</span>':''}</div>`).join('')}</div></div>`).join('');
-  bindSelection();
-  updInfo(); if(!$('#musicDir').options.length)loadMusic();
-}
-['photoSec','videoSec','chTitles'].forEach(id=>$('#'+id).addEventListener('change',updInfo));
+$('#trashGrid').onclick=async e=>{const b=e.target.closest('.tr button');if(!b)return;e.stopPropagation();
+  const t=b.closest('.th'),id=+t.dataset.id,a=b.dataset.a;
+  if(a=='view')return lightbox(T.items,+t.dataset.i,i=>'/api/trash/file/'+i.id);
+  if(a=='restore'){await post('/api/trash/restore',{ids:[id]});t.remove();T.sel.delete(id);tsel();status()}
+  if(a=='del'){if(!confirm('Bu dosya KALICI olarak silinsin mi? Geri alınamaz.'))return;await post('/api/trash/delete',{ids:[id]});t.remove();T.sel.delete(id);tsel();status()}};
+$('#batches').onclick=e=>{const b=e.target.dataset.b;if(b===undefined)return;T.batch=b||null;loadTrash(true)};
+$('#trashMore').onclick=()=>loadTrash(false);
+$('#tAll').onclick=()=>{T.items.forEach(i=>T.sel.add(i.id));tsel()};
+$('#tNone').onclick=()=>{T.sel.clear();tsel()};
+$('#tRestoreSel').onclick=async()=>{const r=await post('/api/trash/restore',{ids:[...T.sel]});alert(fmt(r.restored)+' dosya eski yerine geri alındı');loadTrash(true);status()};
+$('#tDeleteSel').onclick=async()=>{if(!confirm(`${fmt(T.sel.size)} dosya KALICI olarak silinsin mi? Bu geri alınamaz.`))return;
+  const r=await post('/api/trash/delete',{ids:[...T.sel]});alert(`${fmt(r.deleted)} dosya silindi, ${gb(r.freed)} yer açıldı`);loadTrash(true);status()};
+$('#tRestoreAll').onclick=async()=>{const what=T.batch?`"${T.batch}" turundaki`:'Çöpteki TÜM';if(!confirm(`${what} dosyalar eski yerlerine geri alınsın mı?`))return;
+  const r=await post('/api/trash/restore',T.batch?{batch:T.batch}:{all:true});alert(fmt(r.restored)+' dosya geri alındı');loadTrash(true);status()};
+$('#tDeleteAll').onclick=async()=>{const what=T.batch?`"${T.batch}" turundaki`:'Çöpteki TÜM';
+  if(!confirm(`${what} dosyalar KALICI olarak silinecek. Bu geri alınamaz.\n\nEmin misin?`))return;
+  if(!confirm('Son kez soruyorum: kalıcı silinsin mi?'))return;
+  const r=await post('/api/trash/delete',T.batch?{batch:T.batch}:{all:true});alert(`${fmt(r.deleted)} dosya silindi, ${gb(r.freed)} yer açıldı`);loadTrash(true);status()};
 
-// --- müzik
-async function loadMusic(dir){
-  const m=await api('/api/music'+(dir!==undefined?'?dir='+encodeURIComponent(dir):''));
-  $('#musicDir').innerHTML=m.dirs.map(d=>`<option ${d==m.current?'selected':''}>${d}</option>`).join('');
-  $('#musicList').innerHTML=m.files.length?m.files.map(f=>`<label><input type="checkbox" value="${encodeURIComponent(f.path)}" ${music.has(f.path)?'checked':''}><span>${f.name}</span><button type="button" data-p="${encodeURIComponent(f.path)}" title="Dinle">▶</button></label>`).join(''):'<div class="muted" style="padding:12px">Bu klasörde müzik yok.</div>';
-  $('#musicList').querySelectorAll('input').forEach(c=>c.onchange=()=>{const p=decodeURIComponent(c.value);c.checked?music.add(p):music.delete(p);mc()});
-  $('#musicList').querySelectorAll('button').forEach(b=>b.onclick=e=>{e.preventDefault();const pl=$('#player');pl.classList.remove('hide');pl.src='/api/music/play?path='+b.dataset.p;pl.play()});
-  mc();
-}
-function mc(){$('#mCount').textContent=music.size?`${music.size} şarkı seçili (sırayla çalar, gerekirse başa döner)`:'Müzik seçilmedi'}
-$('#musicDir').onchange=e=>loadMusic(e.target.value);
-$('#mAll').onclick=()=>{$('#musicList').querySelectorAll('input').forEach(c=>{c.checked=true;music.add(decodeURIComponent(c.value))});mc()};
-$('#mNone').onclick=()=>{music.clear();$('#musicList').querySelectorAll('input').forEach(c=>c.checked=false);mc()};
+// ---- ayarlar
+async function loadSettings(){const r=await api('/api/settings');
+  $('#folders').innerHTML=r.folders.length?r.folders.map(f=>`<label><input type="checkbox" value="${f.path}" ${f.protected?'checked':''}><span style="flex:1">${f.path}</span><span class="muted">${fmt(f.count)} dosya</span></label>`).join(''):'<div class="muted">Önce arşivi tara.</div>';
+  $('#auto').checked=r.settings.auto;
+  $('#autoInfo').textContent=`Yeni dosyaları ${r.settings.inbox} klasörüne (/DATA/Media/${r.settings.inbox}) at. Kopyaysa çöpe, değilse ${r.settings.photos_dir}/<yıl> veya ${r.settings.videos_dir}/<yıl> klasörüne taşınır. İlk büyük temizlikten sonra kendiliğinden açılır.`}
+$('#saveProt').onclick=async()=>{const p=[...document.querySelectorAll('#folders input:checked')].map(i=>i.value);
+  await post('/api/settings',{protected:p});$('#saveInfo').textContent='Kaydedildi. Sonraki "Kopyaları bul" bu ayarla çalışır.';status()};
+$('#auto').onchange=async e=>{await post('/api/settings',{auto:e.target.checked});status()};
+$('#bursts').onchange=()=>status();
 
-// --- render
-$('#renderBtn').onclick=async()=>{
-  if(!PLAN)return;
-  if(off.size>=allItems().length){alert('Hiç kare seçili değil.');return}
-  const chapters=PLAN.chapters.map(c=>({title:c.title,subtitle:c.subtitle,ids:c.items.filter(i=>!off.has(i.id)).map(i=>i.id)})).filter(c=>c.ids.length);
-  try{await post('/api/render',{title:$('#title').value||PLAN.title,range_text:PLAN.range_text,chapters,music:[...music],
-    music_volume:+$('#mVol').value,video_audio:$('#vAudio').checked,chapter_titles:$('#chTitles').checked,
-    photo_sec:+$('#photoSec').value,video_sec:+$('#videoSec').value,style,
-    beat_sync:$('#beatSync').checked,letterbox:$('#letterbox').checked});
-    loadJobs(); $('#jobs').scrollIntoView({behavior:'smooth'});
-  }catch(e){alert('Hata: '+e.message)}
-};
-let active=false;
-const delBtn=j=>`<button class="ghost del" style="margin-left:auto" onclick="delJob(${j.id},this)">🗑 Sil</button>`;
-async function delJob(id,btn){
-  const job=btn.closest('.job'), name=job.querySelector('b').textContent;
-  if(!confirm(`"${name}" silinsin mi?\n\nFilm dosyası sunucudan kalıcı olarak silinir. Fotoğraf ve videolarına dokunulmaz.`))return;
-  try{await api('/api/jobs/'+id,{method:'DELETE'});loadJobs()}catch(e){alert('Silinemedi: '+e.message)}
-}
-async function loadJobs(){
-  const js=await api('/api/jobs'); active=js.some(j=>['sırada','çalışıyor'].includes(j.status)); if(!js.length){$('#jobs').innerHTML='<span class="muted">Henüz film yok.</span>';return}
-  $('#jobs').innerHTML=js.map(j=>`<div class="job"><div class="row"><b style="flex:1">${j.title}</b><span class="st ${j.status}">${j.status}</span>
-    ${['sırada','çalışıyor'].includes(j.status)?`<button class="ghost" onclick="post('/api/jobs/${j.id}/cancel',{}).then(loadJobs)">İptal</button>`:''}</div>
-    ${j.status=='çalışıyor'||j.status=='sırada'?`<div class="bar"><i style="width:${j.progress}%"></i></div>`:''}
-    <div class="muted">${j.message||''} · ${j.created_at}${j.size_mb?` · ${j.size_mb} MB · ${j.file}`:''}</div>
-    ${j.status=='bitti'&&j.file?`<div class="row"><button class="ghost" onclick="this.outerHTML='<video controls src=/api/jobs/${j.id}/file></video>'">▶ İzle</button><a href="/api/jobs/${j.id}/file?download=1">⬇ İndir</a>${delBtn(j)}</div>`:(['sırada','çalışıyor'].includes(j.status)?'':`<div class="row">${delBtn(j)}</div>`)}</div>`).join('');
-}
-refreshStatus();loadArchive();loadJobs();
-setInterval(refreshStatus,3000);setInterval(()=>{if(active)loadJobs()},3000);
+status();loadGroups(true);loadMoves();setInterval(status,3000);
 </script>
 </body>
 </html>

@@ -5,7 +5,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 
-from . import db, orient, planner, render, scanner, styles
+from . import cleaner, db, organize, orient, planner, render, scanner, styles
 from .analyze import load_image
 from .config import MEDIA_DIRS, MUSIC_DEFAULT, MUSIC_DIR, MUSIC_EXT, OUTPUT_DIR, THUMB_DIR
 
@@ -17,6 +17,12 @@ STATIC = os.path.join(os.path.dirname(__file__), "static")
 @app.get("/", response_class=HTMLResponse)
 def index():
     with open(os.path.join(STATIC, "index.html"), encoding="utf-8") as f:
+        return f.read()
+
+
+@app.get("/film", response_class=HTMLResponse)
+def film_page():
+    with open(os.path.join(STATIC, "film.html"), encoding="utf-8") as f:
         return f.read()
 
 
@@ -275,3 +281,199 @@ def job_file(jid: int, download: int = 0):
         raise HTTPException(404)
     return FileResponse(r["output"], media_type="video/mp4",
                         filename=os.path.basename(r["output"]) if download else None)
+
+
+# ================= Kopya Temizleyici + Düzenleyici =================
+
+@app.get("/api/clean/status")
+def clean_status():
+    st = dict(cleaner.state)
+    st["summary"] = cleaner.summary()
+    st["settings"] = organize.settings()
+    with db.db() as con:
+        t = con.execute("SELECT COUNT(*) n, COALESCE(SUM(size),0) b FROM trash WHERE status='çöpte'").fetchone()
+    st["trash"] = {"files": t["n"], "bytes": t["b"]}
+    st["scan"] = scanner.state
+    return st
+
+
+class FindReq(BaseModel):
+    include_bursts: bool = True
+
+
+@app.post("/api/clean/find")
+def clean_find(req: FindReq):
+    organize.save_settings(include_bursts=req.include_bursts)
+    return {"started": organize.run(full=True, apply_trash=False)}
+
+
+@app.post("/api/clean/apply")
+def clean_apply():
+    if not cleaner.TRASH_DIR:
+        raise HTTPException(400, "Çöp kutusu klasörü ayarlı değil")
+    return {"started": organize.apply_and_organize()}
+
+
+@app.post("/api/clean/inbox")
+def clean_inbox():
+    """Gelen klasörünü şimdi işle (beklemeden)."""
+    s = organize.settings()
+    inbox = organize.abs_dir(s["inbox"])
+    os.makedirs(inbox, exist_ok=True)
+    return {"started": organize.run(full=False, scope=[inbox])}
+
+
+@app.get("/api/clean/groups")
+def clean_groups(offset: int = 0, limit: int = 40, reason: str | None = None):
+    gs = [g for g in cleaner.load_groups()
+          if any(m["id"] != g["keep"] and not m.get("locked") for m in g["members"])]
+    if reason:
+        gs = [g for g in gs if g["reason"] == reason]
+    return {"total": len(gs), "groups": gs[offset:offset + limit]}
+
+
+class GroupReq(BaseModel):
+    keep: int | None = None
+    skip: bool | None = None
+
+
+@app.post("/api/clean/groups/{gid}")
+def clean_group(gid: int, req: GroupReq):
+    g = cleaner.update_group(gid, req.keep, req.skip)
+    if not g:
+        raise HTTPException(404)
+    return g
+
+
+@app.get("/api/settings")
+def get_settings():
+    return {"settings": organize.settings(), "folders": organize.candidate_folders()}
+
+
+class SettingsReq(BaseModel):
+    protected: list[str] | None = None
+    auto: bool | None = None
+    include_bursts: bool | None = None
+
+
+@app.post("/api/settings")
+def set_settings(req: SettingsReq):
+    return organize.save_settings(**{k: v for k, v in req.model_dump().items() if v is not None})
+
+
+@app.get("/api/moves")
+def moves():
+    return organize.move_batches()
+
+
+class BatchReq(BaseModel):
+    batch: str
+
+
+@app.post("/api/moves/undo")
+def moves_undo(req: BatchReq):
+    if cleaner.state["running"]:
+        raise HTTPException(400, "Önce süren işlemin bitmesini bekle")
+    return {"undone": organize.undo_moves(req.batch)}
+
+
+# ---- Çöp kutusu ----
+
+@app.get("/api/trash")
+def trash(offset: int = 0, limit: int = 200, batch: str | None = None):
+    return cleaner.trash_list(offset, limit, batch)
+
+
+class TrashReq(BaseModel):
+    ids: list[int] | None = None
+    batch: str | None = None
+    all: bool = False
+
+
+@app.post("/api/trash/restore")
+def trash_restore(req: TrashReq):
+    if not (req.ids or req.batch or req.all):
+        raise HTTPException(400, "Seçim yok")
+    n = cleaner.restore(req.ids, req.batch)
+    return {"restored": n}
+
+
+@app.post("/api/trash/delete")
+def trash_delete(req: TrashReq):
+    """KALICI silme. Tümü için all=true gerekir (yanlışlıkla boş istekle her şey silinmesin)."""
+    if not (req.ids or req.batch or req.all):
+        raise HTTPException(400, "Seçim yok")
+    n, freed = cleaner.empty(req.ids, req.batch)
+    return {"deleted": n, "freed": freed}
+
+
+@app.get("/api/trash/thumb/{tid}")
+def trash_thumb(tid: int):
+    with db.db() as con:
+        r = con.execute("SELECT media_id, kind, trash_path FROM trash WHERE id=?", (tid,)).fetchone()
+    if not r:
+        raise HTTPException(404)
+    for f in os.listdir(THUMB_DIR):
+        if f.startswith(f"{r['media_id']}_r"):
+            return FileResponse(os.path.join(THUMB_DIR, f))
+    out = os.path.join(THUMB_DIR, f"t{tid}.jpg")
+    if not os.path.exists(out):
+        try:
+            if r["kind"] == "photo":
+                load_image(r["trash_path"], 360).save(out, quality=80)
+            else:
+                subprocess.run(["ffmpeg", "-y", "-v", "error", "-ss", "1", "-i", r["trash_path"],
+                                "-frames:v", "1", "-vf", "scale=360:-2", out], timeout=60)
+        except Exception:
+            raise HTTPException(500)
+    if not os.path.exists(out):
+        raise HTTPException(404)
+    return FileResponse(out)
+
+
+@app.get("/api/trash/file/{tid}")
+def trash_file(tid: int):
+    with db.db() as con:
+        r = con.execute("SELECT trash_path FROM trash WHERE id=?", (tid,)).fetchone()
+    if not r or not os.path.isfile(r["trash_path"]):
+        raise HTTPException(404)
+    return FileResponse(r["trash_path"])
+
+
+# ---- Kütüphane: Tüm resimler / Tüm videolar ----
+
+def _lib_where(kind):
+    # kind: photo | video | other (ekran görüntüleri ve başka yerden kaydedilenler)
+    if kind == "other":
+        return "src IS NOT NULL", []
+    return "kind=? AND src IS NULL", [kind]
+
+
+@app.get("/api/library/years")
+def library_years(kind: str = "photo"):
+    w, a = _lib_where(kind)
+    with db.db() as con:
+        rows = con.execute("SELECT CASE WHEN date_source IN ('exif','google','filename') THEN substr(taken_at,1,4) "
+                           f"ELSE 'Tarihsiz' END y, COUNT(*) n FROM media WHERE {w} GROUP BY y ORDER BY y DESC",
+                           a).fetchall()
+    return [dict(r) for r in rows]
+
+
+@app.get("/api/library")
+def library(kind: str = "photo", year: str | None = None, offset: int = 0, limit: int = 120):
+    w, args = _lib_where(kind)
+    q = f"SELECT id, path, taken_at, duration, width, height, kind FROM media WHERE {w}"
+    if year == "Tarihsiz":
+        q += " AND (date_source NOT IN ('exif','google','filename') OR date_source IS NULL)"
+    elif year:
+        q += " AND date_source IN ('exif','google','filename') AND substr(taken_at,1,4)=?"
+        args.append(year)
+    with db.db() as con:
+        total = con.execute(q.replace("SELECT id, path, taken_at, duration, width, height, kind", "SELECT COUNT(*)"),
+                            args).fetchone()[0]
+        rows = con.execute(q + " ORDER BY taken_at DESC LIMIT ? OFFSET ?", args + [limit, offset]).fetchall()
+    root = cleaner.archive_root()
+    return {"total": total, "items": [{"id": r["id"], "name": os.path.basename(r["path"]),
+                                       "folder": os.path.relpath(os.path.dirname(r["path"]), root),
+                                       "taken_at": r["taken_at"], "duration": r["duration"],
+                                       "kind": r["kind"]} for r in rows]}

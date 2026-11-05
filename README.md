@@ -1,4 +1,20 @@
-# Dedplay Film
+# Dedplay Arşiv — Kopya Temizleyici ve Düzenleyici
+
+Fotoğraf ve video arşivini tarar, kopyaları ayıklar ve her şeyi düzenli klasörlere yerleştirir.
+
+- **Kopyalar:** Birebir aynı dosyalar; farklı ad, boyut ya da sıkıştırmadaki aynı görüntüler (WhatsApp, Google Fotoğraflar kopyaları, yeniden kaydedilmiş videolar); seri çekimler. Her grupta **en iyisi** kalır: gerçek çekim tarihi, en yüksek çözünürlük, en net, gözleri açık olan. Diğerleri **çöp kutusuna taşınır**, silinmez.
+- **Düzen:** `Resimler/<yıl>`, `Videolar/<yıl>`. Ekran görüntüleri, ekran kayıtları ve WhatsApp/Instagram/TikTok/TV gibi başka yerlerden kaydedilenler `Ekran ve Kaydedilenler/Resimler|Videolar/<yıl>` klasörüne gider. Tarihi bilinmeyenler `Tarihsiz` klasörüne konur.
+- **Korunan klasörler** (ör. `video/kenan dugun`, `video/Necla video`, `Photos/muzaffer resim`) olduğu gibi kalır. İçlerindeki dosyalar taşınmaz ve asla çöpe atılmaz.
+- **Gelen kutusu:** Yeni dosyaları `/DATA/Media/Gelen` klasörüne at. 5 dakikada bir işlenir: kopyaysa çöpe, değilse yerine. Ayrıca 6 saatte bir tüm arşiv kontrol edilir.
+- **Çöp kutusu:** `/DATA/Media/Dedplay Çöp Kutusu`. Klasör yapısı korunur. Tek tek, seçerek ya da hepsini geri alabilir veya kalıcı silebilirsin. Geri alınan dosya bir daha çöpe atılmaz.
+- **Geri alma:** Her düzenleme turu kaydedilir. "Son düzenlemeler" bölümünden dosyalar eski klasörlerine geri döndürülebilir.
+- **Sekmeler:** Tüm resimler, Tüm videolar, Ekran & kaydedilenler (yıla göre galeri, büyük görüntüleme), Çöp kutusu, Ayarlar.
+
+Eski film bölümü `/film` adresinde duruyor (deneysel).
+
+---
+
+## (Eski) Dedplay Film
 
 Fotoğraf ve video arşivini, uğraşmadan kaliteli bir filme çeviren ev sunucusu uygulaması.
 "2025" de, süreyi seç, gerisini uygulama yapar.

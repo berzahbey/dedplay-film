@@ -29,6 +29,19 @@ CREATE TABLE IF NOT EXISTS media (
 );
 CREATE INDEX IF NOT EXISTS idx_media_taken ON media(taken_at);
 CREATE INDEX IF NOT EXISTS idx_media_folder ON media(folder);
+CREATE TABLE IF NOT EXISTS trash (
+    id INTEGER PRIMARY KEY,
+    media_id INTEGER, kind TEXT, orig_path TEXT NOT NULL, trash_path TEXT NOT NULL,
+    size INTEGER, taken_at TEXT, reason TEXT, keeper_path TEXT, extras TEXT,
+    batch TEXT, moved_at TEXT DEFAULT (datetime('now','localtime')),
+    status TEXT DEFAULT 'çöpte'      -- çöpte | geri alındı | silindi
+);
+CREATE INDEX IF NOT EXISTS idx_trash_status ON trash(status);
+CREATE TABLE IF NOT EXISTS moves (
+    id INTEGER PRIMARY KEY, media_id INTEGER, src TEXT, dst TEXT, extras TEXT, batch TEXT,
+    at TEXT DEFAULT (datetime('now','localtime')), undone INTEGER DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS pins (path TEXT PRIMARY KEY);
 CREATE TABLE IF NOT EXISTS jobs (
     id INTEGER PRIMARY KEY,
     title TEXT, status TEXT, progress REAL DEFAULT 0, message TEXT,
@@ -63,7 +76,10 @@ def init():
         for name, typ in (("sharp", "REAL"), ("dhash", "TEXT"), ("analyzed", "INTEGER DEFAULT 0"),
                           ("dup_of", "INTEGER"), ("highlights", "TEXT"),
                           ("rotate_fix", "INTEGER"), ("auto_rot", "INTEGER"),
-                          ("meta_rot", "INTEGER")):
+                          ("meta_rot", "INTEGER"), ("qhash", "TEXT"), ("faces", "INTEGER"),
+                          ("eyes", "INTEGER"), ("pinned", "INTEGER"), ("make", "TEXT"),
+                          ("model", "TEXT"), ("software", "TEXT"), ("ucomment", "TEXT"),
+                          ("src_checked", "INTEGER"), ("src", "TEXT")):
             if name not in cols:
                 con.execute(f"ALTER TABLE media ADD COLUMN {name} {typ}")
         # Eski sürümün 64 bitlik izleri ve analiz edilmemiş videolar yeniden analiz edilir
@@ -73,6 +89,14 @@ def init():
         # Önceki sürümün otomatik yön kararları gevşekti (yapraklarda yanlış yüz bulabiliyordu): yeniden bak
         if "meta_rot" not in cols:
             con.execute("UPDATE media SET auto_rot=NULL WHERE kind='video'")
+        # Klasör bağlantıları değiştiyse kayıtlı yolları güncelle (yeniden tarama gerekmez)
+        from .config import PATH_MIGRATE
+        for old, new in PATH_MIGRATE:
+            old, new = old.rstrip("/") + "/", new.rstrip("/") + "/"
+            n = len(old)
+            con.execute("UPDATE media SET path=? || substr(path, ?), folder=? || substr(folder || '/', ?) "
+                        "WHERE substr(path, 1, ?) = ?", (new, n + 1, new, n + 1, n, old))
+            con.execute("UPDATE media SET folder=rtrim(folder, '/')")
         # Yarım kalmış işleri kapat (container yeniden başlarsa)
         con.execute("UPDATE jobs SET status='hata', message='Sunucu yeniden başladı' "
                     "WHERE status IN ('sırada','çalışıyor')")

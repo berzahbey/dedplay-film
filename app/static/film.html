@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dedplay Film</title>
+<style>
+:root{--bg:#0f1115;--card:#171a21;--line:#262b36;--tx:#e9ebf0;--mu:#8b93a5;--ac:#e8b24a;--ac2:#f5c96d;--ok:#4cc38a;--bad:#e5484d}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+header{display:flex;align-items:center;gap:16px;padding:18px 24px;border-bottom:1px solid var(--line);position:sticky;top:0;background:rgba(15,17,21,.92);backdrop-filter:blur(8px);z-index:5;flex-wrap:wrap}
+h1{font-size:20px;margin:0;letter-spacing:.3px}h1 span{color:var(--ac)}
+.pill{background:var(--card);border:1px solid var(--line);border-radius:999px;padding:6px 14px;color:var(--mu);font-size:13px}
+main{max-width:1200px;margin:0 auto;padding:24px 16px 80px;display:grid;gap:20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px}
+.card h2{margin:0 0 14px;font-size:17px;display:flex;gap:10px;align-items:center}
+.card h2 .n{background:var(--ac);color:#111;border-radius:50%;width:24px;height:24px;display:inline-grid;place-items:center;font-size:13px}
+.row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.tabs{display:flex;gap:4px;background:#0f1115;padding:4px;border-radius:10px;width:fit-content;margin-bottom:14px}
+.tabs button{background:none;border:0;color:var(--mu);padding:7px 16px;border-radius:7px;cursor:pointer;font:inherit}
+.tabs button.on{background:var(--line);color:var(--tx)}
+button.btn{background:var(--ac);color:#15120a;border:0;border-radius:9px;padding:10px 18px;font-weight:600;font-size:15px;font-family:inherit;cursor:pointer}
+button.btn:hover{background:var(--ac2)}button.btn:disabled{opacity:.4;cursor:default}
+button.ghost{background:none;border:1px solid var(--line);color:var(--tx);border-radius:9px;padding:8px 14px;cursor:pointer;font:inherit}
+input,select{background:#0f1115;border:1px solid var(--line);color:var(--tx);border-radius:8px;padding:8px 10px;font:inherit}
+input[type=range]{padding:0}
+label.f{display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--mu)}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{border:1px solid var(--line);background:#0f1115;border-radius:10px;padding:8px 14px;cursor:pointer;text-align:left}
+.chip b{display:block;font-size:17px;color:var(--tx)}.chip small{color:var(--mu)}
+.chip.on{border-color:var(--ac);background:#2a2214}
+.seg{display:flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.seg button{background:#0f1115;border:0;border-right:1px solid var(--line);color:var(--mu);padding:8px 13px;cursor:pointer;font:inherit}
+.seg button:last-child{border:0}.seg button.on{background:var(--ac);color:#15120a;font-weight:600}
+.stats{color:var(--mu);font-size:14px;margin-bottom:12px}.stats b{color:var(--tx)}
+.chap{margin-top:18px}.chap h3{font-size:15px;margin:0 0 8px;display:flex;gap:10px;align-items:baseline}
+.chap h3 small{color:var(--mu);font-weight:400}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:6px}
+.th{position:relative;aspect-ratio:1;border-radius:7px;overflow:hidden;background:#0f1115;cursor:pointer}
+.th img{width:100%;height:100%;object-fit:cover;display:block;transition:.15s}
+.th .b{position:absolute;right:5px;bottom:5px;background:rgba(0,0,0,.7);font-size:11px;padding:1px 6px;border-radius:5px}
+.th.off img{opacity:.18;filter:grayscale(1)}
+.th.off::after{content:"✕";position:absolute;inset:0;display:grid;place-items:center;font-size:30px;color:var(--bad)}
+.muted{color:var(--mu);font-size:13px}
+.ml{max-height:280px;overflow:auto;border:1px solid var(--line);border-radius:10px}
+.ml label{display:flex;gap:10px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line);cursor:pointer}
+.ml label:last-child{border:0}.ml label span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ml button{background:none;border:0;color:var(--ac);cursor:pointer;font-size:15px}
+.job{border:1px solid var(--line);border-radius:10px;padding:14px;display:grid;gap:8px}
+.bar{height:7px;background:#0f1115;border-radius:9px;overflow:hidden}.bar i{display:block;height:100%;background:var(--ac);transition:width .5s}
+.st{font-size:12px;padding:2px 9px;border-radius:99px;background:var(--line)}
+button.ghost.del{color:var(--bad);border-color:#5a2226;font-size:13px;padding:5px 12px}.rotb{position:absolute;top:5px;right:5px;width:28px;height:28px;border-radius:50%;border:0;background:rgba(0,0,0,.65);color:#fff;font-size:16px;cursor:pointer;opacity:0;transition:.15s}.th:hover .rotb{opacity:1}.rb{top:5px;bottom:auto!important;left:5px;right:auto!important;background:#2a2214!important;color:var(--ac)}@media (hover:none){.rotb{opacity:.85}}.selbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:4px}.selbar button{font-size:13px;padding:6px 12px}button.ghost.mini{font-size:12px;padding:3px 10px;margin-left:auto}.chap h3{align-items:center}.th{user-select:none}.st.bitti{background:#163d2b;color:var(--ok)}.st.hata{background:#3d1618;color:var(--bad)}
+video{width:100%;max-width:720px;border-radius:10px;background:#000}
+.hide{display:none!important}
+a{color:var(--ac)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Dedplay <span>Film</span></h1>
+  <div class="pill" id="arch">Arşiv yükleniyor…</div>
+  <button class="ghost" id="scanBtn">Arşivi tara</button>
+</header>
+<main>
+
+<section class="card">
+  <h2><span class="n">1</span>Ne filme dönüşsün?</h2>
+  <div class="tabs" id="srcTabs">
+    <button data-t="year" class="on">Yıl</button><button data-t="range">Tarih aralığı</button><button data-t="folder">Klasör</button>
+  </div>
+  <div id="t-year"><div class="chips" id="years"><span class="muted">Önce arşivi tara.</span></div></div>
+  <div id="t-range" class="hide row">
+    <label class="f">Başlangıç<input type="date" id="dStart"></label>
+    <label class="f">Bitiş<input type="date" id="dEnd"></label>
+  </div>
+  <div id="t-folder" class="hide row">
+    <label class="f" style="min-width:320px">Klasör<select id="folderSel"></select></label>
+  </div>
+  <div style="margin-top:18px">
+    <div class="muted" style="margin-bottom:6px">Stil</div>
+    <div class="chips" id="styleSel">
+      <button class="chip" data-s="sade" data-p="3.5"><b>Sade</b><small>Yumuşak geçişler, doğal renkler</small></button>
+      <button class="chip on" data-s="sinematik" data-p="4"><b>Sinematik</b><small>Film tonu, kenar karartma, ağır tempo</small></button>
+      <button class="chip" data-s="enerjik" data-p="2.5"><b>Enerjik</b><small>Canlı renkler, hızlı ritim, hareketli geçişler</small></button>
+    </div>
+  </div>
+  <div class="row" style="margin-top:18px;align-items:flex-end">
+    <label class="f" style="flex:1;min-width:240px">Film adı<input id="title" placeholder="ör. 2025 – Yılımız"></label>
+    <label class="f">Film süresi
+      <div class="seg" id="durSeg">
+        <button data-m="5">5 dk</button><button data-m="10">10 dk</button><button data-m="15" class="on">15 dk</button><button data-m="20">20 dk</button><button data-m="30">30 dk</button><button data-m="0">Hepsi</button>
+      </div>
+    </label>
+    <label class="f">Fotoğraf (sn)<input type="number" id="photoSec" value="4" min="2" max="8" step="0.5" style="width:80px"></label>
+    <label class="f">Video kesiti (sn)<input type="number" id="videoSec" value="7" min="3" max="30" step="1" style="width:80px"></label>
+    <button class="btn" id="planBtn">Kareleri seç</button>
+  </div>
+</section>
+
+<section class="card hide" id="prevCard">
+  <h2><span class="n">2</span>Önizleme</h2>
+  <div class="stats" id="stats"></div>
+  <div class="selbar">
+    <button class="ghost" data-a="none">☐ Hepsini kaldır</button>
+    <button class="ghost" data-a="all">☑ Hepsini seç</button>
+    <button class="ghost" data-a="inv">⇄ Tersine çevir</button>
+    <button class="ghost" data-a="videos">▶ Sadece videolar</button>
+    <button class="ghost" data-a="photos">▣ Sadece fotoğraflar</button>
+    <span class="muted" id="selInfo"></span>
+  </div>
+  <div class="muted" style="margin:6px 0 4px">İpucu: Yan ya da ters duran bir kare varsa üzerine gelip ↻ ile döndür · Tıkla = seç/kaldır · Basılı tutup kaydır = birden fazla kareyi boya · Shift + tıkla = aradaki her şey. Sadece istediklerini yapmak için önce "Hepsini kaldır"a bas, sonra istediklerini seç.</div>
+  <div id="chapters"></div>
+</section>
+
+<section class="card hide" id="musicCard">
+  <h2><span class="n">3</span>Müzik ve ses</h2>
+  <div class="row" style="margin-bottom:10px">
+    <label class="f">Müzik klasörü<select id="musicDir"></select></label>
+    <button class="ghost" id="mAll">Hepsini seç</button><button class="ghost" id="mNone">Temizle</button>
+    <span class="muted" id="mCount"></span>
+  </div>
+  <div class="ml" id="musicList"></div>
+  <audio id="player" class="hide" controls style="width:100%;margin-top:8px"></audio>
+  <div class="row" style="margin-top:14px">
+    <label class="f">Müzik sesi <input type="range" id="mVol" min="0.2" max="1.2" step="0.05" value="0.8"></label>
+    <label class="row"><input type="checkbox" id="vAudio" checked> Videoların kendi sesi (konuşurken müzik kısılır)</label>
+    <label class="row"><input type="checkbox" id="chTitles" checked> Bölüm başlıkları</label>
+    <label class="row"><input type="checkbox" id="beatSync" checked> Kareleri müziğin ritmine göre değiştir</label>
+    <label class="row"><input type="checkbox" id="letterbox"> Sinema bantları (üst-alt siyah şerit)</label>
+  </div>
+  <div class="row" style="margin-top:18px">
+    <button class="btn" id="renderBtn">🎬 Filmi oluştur</button>
+    <span class="muted" id="renderInfo"></span>
+  </div>
+</section>
+
+<section class="card">
+  <h2><span class="n">4</span>Filmlerim</h2>
+  <div id="jobs" style="display:grid;gap:12px"><span class="muted">Henüz film yok.</span></div>
+</section>
+</main>
+
+<script>
+const $=s=>document.querySelector(s), api=(u,o)=>fetch(u,o).then(async r=>{const t=await r.text();let j=null;try{j=JSON.parse(t)}catch(e){}
+  if(!r.ok)throw new Error((j&&j.detail)||`Sunucu hatası ${r.status}: ${t.slice(0,200)}`);if(j===null)throw new Error('Sunucudan beklenmeyen cevap');return j});
+const post=(u,b)=>api(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});
+const AY=["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
+let style='sinematik', src='year', sel={}, folders=[], minutes=15, PLAN=null, off=new Set(), music=new Set();
+const fmt=n=>n.toLocaleString('tr-TR');
+const mmss=s=>{s=Math.round(s);const m=Math.floor(s/60);return m?`${m} dk ${String(s%60).padStart(2,'0')} sn`:`${s} sn`};
+
+// --- arşiv durumu
+async function refreshStatus(){
+  const s=await api('/api/status'); const sc=s.scan;
+  let t=`${fmt(s.photos)} fotoğraf · ${fmt(s.videos)} video`;
+  if(sc.running){const pct=sc.todo?Math.round(sc.done/sc.todo*100):0;t=`⏳ ${sc.phase}… ${sc.todo?pct+'%':fmt(sc.found)+' dosya'}`}
+  else if(s.pending_analysis) t+=` · ${fmt(s.pending_analysis)} analiz bekliyor`;
+  if(s.duplicates) t+=` · ${fmt(s.duplicates)} kopya ayıklandı`;
+  if(sc.running){refreshStatus.n=(refreshStatus.n||0)+1; if(refreshStatus.n%7==0) loadArchive()}
+  if(sc.error) t+=' · Hata: '+sc.error;
+  $('#arch').textContent=t; $('#scanBtn').disabled=sc.running;
+  if(!sc.running && refreshStatus.wasRunning) loadArchive();
+  refreshStatus.wasRunning=sc.running;
+}
+$('#scanBtn').onclick=async()=>{await post('/api/scan',{});refreshStatus()};
+
+async function loadArchive(){
+  const ys=await api('/api/years');
+  $('#years').innerHTML=ys.length?ys.map(y=>`<button class="chip" data-y="${y.year}"><b>${y.year}</b><small>${fmt(y.photos)} foto · ${fmt(y.videos)} video</small></button>`).join(''):'<span class="muted">Arşiv boş. "Arşivi tara"ya bas.</span>';
+  document.querySelectorAll('#years .chip').forEach(c=>c.onclick=()=>{
+    document.querySelectorAll('#years .chip').forEach(x=>x.classList.remove('on'));c.classList.add('on');
+    sel={start:c.dataset.y+'-01-01',end:c.dataset.y+'-12-31'}; $('#title').value=c.dataset.y+' – Yılımız';
+  });
+  folders=await api('/api/folders');
+  $('#folderSel').innerHTML='<option value="">— seç —</option>'+folders.map((f,i)=>`<option value="${i}">${f.label} (${fmt(f.count)})</option>`).join('');
+}
+$('#folderSel').onchange=e=>{const f=folders[e.target.value];if(f){sel={start:f.from.slice(0,10),end:f.to.slice(0,10),folder:f.path};$('#title').value=f.label.split('/').pop()}};
+['dStart','dEnd'].forEach(id=>$('#'+id).onchange=()=>{sel={start:$('#dStart').value,end:$('#dEnd').value||$('#dStart').value}});
+$('#srcTabs').onclick=e=>{const t=e.target.dataset.t;if(!t)return;src=t;sel={};
+  document.querySelectorAll('#srcTabs button').forEach(b=>b.classList.toggle('on',b.dataset.t==t));
+  ['year','range','folder'].forEach(x=>$('#t-'+x).classList.toggle('hide',x!=t))};
+$('#styleSel').onclick=e=>{const c=e.target.closest('.chip');if(!c)return;style=c.dataset.s;$('#photoSec').value=c.dataset.p;
+  document.querySelectorAll('#styleSel .chip').forEach(x=>x.classList.toggle('on',x===c));updInfo()};
+$('#durSeg').onclick=e=>{const m=e.target.dataset.m;if(m===undefined)return;minutes=+m;
+  document.querySelectorAll('#durSeg button').forEach(b=>b.classList.toggle('on',b===e.target))};
+
+// --- plan
+function segDur(it){const vs=+$('#videoSec').value,d=it.duration||0;
+  if(it.kind=='photo')return +$('#photoSec').value; if(d<=vs+1.5)return Math.max(d,1); return d>60?2*vs:vs}
+const TR={sade:.5,sinematik:.8,enerjik:.35};
+function estimate(){if(!PLAN)return 0;let s=8;for(const c of PLAN.chapters){const its=c.items.filter(i=>!off.has(i.id)&&i.role!='cutaway');if(its.length)s+=($('#chTitles').checked?3:0)+its.reduce((a,i)=>a+segDur(i)*(i.role=='pair'?.65:1)-TR[style],0)}return s}
+function updInfo(){const n=PLAN?PLAN.chapters.reduce((a,c)=>a+c.items.length,0)-off.size:0;
+  $('#renderInfo').textContent=PLAN?`${fmt(n)} kare · tahmini film süresi ${mmss(estimate())}`:''}
+
+$('#planBtn').onclick=async()=>{
+  if(!sel.start){alert('Önce bir yıl, tarih aralığı veya klasör seç.');return}
+  $('#planBtn').disabled=true;$('#planBtn').textContent='Seçiliyor…';
+  try{
+    PLAN=await post('/api/plan',{...sel,target_minutes:minutes,photo_sec:+$('#photoSec').value,video_sec:+$('#videoSec').value,title:$('#title').value||null,style});
+    off=new Set(); if(!$('#title').value)$('#title').value=PLAN.title; drawPlan();
+  }catch(e){alert('Hata: '+e.message)}
+  $('#planBtn').disabled=false;$('#planBtn').textContent='Kareleri seç';
+};
+// --- toplu seçim
+const allItems=()=>PLAN?PLAN.chapters.flatMap(c=>c.items):[];
+function setOff(id,v){v?off.add(id):off.delete(id);const t=document.querySelector(`.th[data-id="${id}"]`);if(t)t.classList.toggle('off',v)}
+function refreshSel(){const n=allItems().length;$('#selInfo').textContent=`${fmt(n-off.size)} / ${fmt(n)} kare seçili`;updInfo()}
+let paint=null,lastClick=null,moved=false;
+function bindSelection(){
+  const ths=[...document.querySelectorAll('.th')], order=ths.map(t=>+t.dataset.id);
+  document.querySelectorAll('.rotb').forEach(b=>{
+    b.onmousedown=e=>e.stopPropagation();
+    b.onclick=async e=>{e.stopPropagation();const id=+b.dataset.rid,it=allItems().find(x=>x.id==id);
+      try{const deg=(await post('/api/media/'+id+'/rotate',{step:90})).rot;it.rot=deg;it.rot_auto=false;
+        const th=b.closest('.th');th.querySelector('img').src=`/api/thumb/${id}?r=${deg}`;th.querySelector('.rb')?.remove()}
+      catch(err){alert('Döndürülemedi: '+err.message)}};
+  });
+  ths.forEach(t=>{
+    t.ondragstart=e=>e.preventDefault();
+    t.onmousedown=e=>{e.preventDefault();const id=+t.dataset.id;
+      if(e.shiftKey&&lastClick!==null){const a=order.indexOf(lastClick),b=order.indexOf(id),v=off.has(lastClick);
+        order.slice(Math.min(a,b),Math.max(a,b)+1).forEach(x=>setOff(x,v));refreshSel();return}
+      paint=!off.has(id);moved=false;setOff(id,paint);lastClick=id;refreshSel()};
+    t.onmouseenter=()=>{if(paint!==null){moved=true;setOff(+t.dataset.id,paint);refreshSel()}};
+  });
+  document.querySelectorAll('[data-ch]').forEach(b=>b.onclick=()=>{const its=PLAN.chapters[+b.dataset.ch].items;
+    const anyOn=its.some(i=>!off.has(i.id));its.forEach(i=>setOff(i.id,anyOn));refreshSel()});
+  refreshSel();
+}
+document.addEventListener('mouseup',()=>paint=null);
+document.querySelector('.selbar').onclick=e=>{const a=e.target.dataset.a;if(!a||!PLAN)return;
+  allItems().forEach(i=>setOff(i.id,a=='none'?true:a=='all'?false:a=='inv'?!off.has(i.id):a=='videos'?i.kind!='video':i.kind!='photo'));refreshSel()};
+function drawPlan(){
+  const s=PLAN.stats; $('#prevCard').classList.remove('hide');$('#musicCard').classList.remove('hide');
+  if(!PLAN.chapters.length){$('#stats').innerHTML='Bu aralıkta kare bulunamadı.';$('#chapters').innerHTML='';return}
+  $('#stats').innerHTML=`<b>${fmt(s.total)}</b> dosya bulundu · <b>${fmt(s.chosen)}</b> kare seçildi · ${fmt(s.duplicates)} benzer kare, ${fmt(s.blurry)} bulanık, ${fmt(s.filtered)} ekran görüntüsü/Live Photo elendi · ${PLAN.mode=='day'?'günlere':'aylara'} göre bölümlendi${s.cutaways?` · <b>${s.cutaways}</b> fotoğraf videolara ara plan oldu`:''}${s.pairs?` · ${s.pairs} ikili kare`:''}${PLAN.scan_running?'<br>⏳ Tarama sürüyor: şu ana kadar taranan dosyalarla seçildi. Tarama bitince tekrar "Kareleri seç"e basarsan yeni dosyalar da eklenir.':''}`;
+  $('#chapters').innerHTML=PLAN.chapters.map((c,ci)=>`<div class="chap"><h3>${c.title} <small>${c.subtitle} · ${c.items.length} kare</small><button class="ghost mini" data-ch="${ci}">bölümü seç / kaldır</button></h3><div class="grid">${
+    c.items.map(i=>`<div class="th" data-id="${i.id}" title="${i.name}\n${i.taken_at}"><img loading="lazy" src="/api/thumb/${i.id}?r=${i.rot||0}"><button class="rotb" data-rid="${i.id}" title="Yan ya da ters duruyorsa döndür (saat yönünde 90°)">↻</button>${i.rot_auto?'<span class="b rb" title="Yüzlere bakılarak otomatik döndürüldü">↻ oto</span>':''}${i.kind=='video'?`<span class="b">▶ ${Math.round(i.duration||0)} sn</span>`:''}${i.role=='cutaway'?'<span class="b" style="left:5px;right:auto">↳ ara plan</span>':''}${i.role=='pair'?'<span class="b" style="left:5px;right:auto">⧉ ikili</span>':''}</div>`).join('')}</div></div>`).join('');
+  bindSelection();
+  updInfo(); if(!$('#musicDir').options.length)loadMusic();
+}
+['photoSec','videoSec','chTitles'].forEach(id=>$('#'+id).addEventListener('change',updInfo));
+
+// --- müzik
+async function loadMusic(dir){
+  const m=await api('/api/music'+(dir!==undefined?'?dir='+encodeURIComponent(dir):''));
+  $('#musicDir').innerHTML=m.dirs.map(d=>`<option ${d==m.current?'selected':''}>${d}</option>`).join('');
+  $('#musicList').innerHTML=m.files.length?m.files.map(f=>`<label><input type="checkbox" value="${encodeURIComponent(f.path)}" ${music.has(f.path)?'checked':''}><span>${f.name}</span><button type="button" data-p="${encodeURIComponent(f.path)}" title="Dinle">▶</button></label>`).join(''):'<div class="muted" style="padding:12px">Bu klasörde müzik yok.</div>';
+  $('#musicList').querySelectorAll('input').forEach(c=>c.onchange=()=>{const p=decodeURIComponent(c.value);c.checked?music.add(p):music.delete(p);mc()});
+  $('#musicList').querySelectorAll('button').forEach(b=>b.onclick=e=>{e.preventDefault();const pl=$('#player');pl.classList.remove('hide');pl.src='/api/music/play?path='+b.dataset.p;pl.play()});
+  mc();
+}
+function mc(){$('#mCount').textContent=music.size?`${music.size} şarkı seçili (sırayla çalar, gerekirse başa döner)`:'Müzik seçilmedi'}
+$('#musicDir').onchange=e=>loadMusic(e.target.value);
+$('#mAll').onclick=()=>{$('#musicList').querySelectorAll('input').forEach(c=>{c.checked=true;music.add(decodeURIComponent(c.value))});mc()};
+$('#mNone').onclick=()=>{music.clear();$('#musicList').querySelectorAll('input').forEach(c=>c.checked=false);mc()};
+
+// --- render
+$('#renderBtn').onclick=async()=>{
+  if(!PLAN)return;
+  if(off.size>=allItems().length){alert('Hiç kare seçili değil.');return}
+  const chapters=PLAN.chapters.map(c=>({title:c.title,subtitle:c.subtitle,ids:c.items.filter(i=>!off.has(i.id)).map(i=>i.id)})).filter(c=>c.ids.length);
+  try{await post('/api/render',{title:$('#title').value||PLAN.title,range_text:PLAN.range_text,chapters,music:[...music],
+    music_volume:+$('#mVol').value,video_audio:$('#vAudio').checked,chapter_titles:$('#chTitles').checked,
+    photo_sec:+$('#photoSec').value,video_sec:+$('#videoSec').value,style,
+    beat_sync:$('#beatSync').checked,letterbox:$('#letterbox').checked});
+    loadJobs(); $('#jobs').scrollIntoView({behavior:'smooth'});
+  }catch(e){alert('Hata: '+e.message)}
+};
+let active=false;
+const delBtn=j=>`<button class="ghost del" style="margin-left:auto" onclick="delJob(${j.id},this)">🗑 Sil</button>`;
+async function delJob(id,btn){
+  const job=btn.closest('.job'), name=job.querySelector('b').textContent;
+  if(!confirm(`"${name}" silinsin mi?\n\nFilm dosyası sunucudan kalıcı olarak silinir. Fotoğraf ve videolarına dokunulmaz.`))return;
+  try{await api('/api/jobs/'+id,{method:'DELETE'});loadJobs()}catch(e){alert('Silinemedi: '+e.message)}
+}
+async function loadJobs(){
+  const js=await api('/api/jobs'); active=js.some(j=>['sırada','çalışıyor'].includes(j.status)); if(!js.length){$('#jobs').innerHTML='<span class="muted">Henüz film yok.</span>';return}
+  $('#jobs').innerHTML=js.map(j=>`<div class="job"><div class="row"><b style="flex:1">${j.title}</b><span class="st ${j.status}">${j.status}</span>
+    ${['sırada','çalışıyor'].includes(j.status)?`<button class="ghost" onclick="post('/api/jobs/${j.id}/cancel',{}).then(loadJobs)">İptal</button>`:''}</div>
+    ${j.status=='çalışıyor'||j.status=='sırada'?`<div class="bar"><i style="width:${j.progress}%"></i></div>`:''}
+    <div class="muted">${j.message||''} · ${j.created_at}${j.size_mb?` · ${j.size_mb} MB · ${j.file}`:''}</div>
+    ${j.status=='bitti'&&j.file?`<div class="row"><button class="ghost" onclick="this.outerHTML='<video controls src=/api/jobs/${j.id}/file></video>'">▶ İzle</button><a href="/api/jobs/${j.id}/file?download=1">⬇ İndir</a>${delBtn(j)}</div>`:(['sırada','çalışıyor'].includes(j.status)?'':`<div class="row">${delBtn(j)}</div>`)}</div>`).join('');
+}
+refreshStatus();loadArchive();loadJobs();
+setInterval(refreshStatus,3000);setInterval(()=>{if(active)loadJobs()},3000);
+</script>
+</body>
+</html>

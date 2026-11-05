@@ -1,0 +1,308 @@
+"""Arşiv düzenleyici.
+
+Hedef yapı (arşiv kökü = /DATA/Media):
+    Resimler/<yıl>/...      tüm fotoğraflar
+    Videolar/<yıl>/...      tüm videolar
+    Resimler/Tarihsiz, Videolar/Tarihsiz   çekim tarihi bilinmeyenler
+Korunan klasörler (ör. "kenan dugun", "Necla video") olduğu gibi kalır: içlerindeki dosyalar
+taşınmaz ve asla çöpe atılmaz.
+Gelen kutusu (Gelen): yeni dosyalar buraya atılır; birkaç dakikada bir işlenir — kopyalar çöpe,
+diğerleri Resimler/Videolar'a.
+Her taşıma kaydedilir ve geri alınabilir.
+"""
+import json
+import os
+import shutil
+import threading
+import time
+import traceback
+from datetime import datetime
+
+from . import cleaner, db, scanner
+from .config import DATA_DIR, MEDIA_DIRS, TRASH_DIR
+
+SETTINGS_FILE = os.path.join(DATA_DIR, "ayarlar.json")
+DEFAULTS = {
+    "photos_dir": "Resimler",
+    "videos_dir": "Videolar",
+    "inbox": "Gelen",
+    "other_dir": "Ekran ve Kaydedilenler",
+    "protected": ["video/kenan dugun", "video/Necla video", "Photos/muzaffer resim"],
+    "include_bursts": True,
+    "auto": False,          # ilk büyük temizlikten sonra açılır
+    "last_full": None,
+}
+state = cleaner.state
+_lock = threading.Lock()
+
+
+def settings():
+    s = dict(DEFAULTS)
+    try:
+        with open(SETTINGS_FILE, encoding="utf-8") as f:
+            s.update(json.load(f))
+    except (OSError, json.JSONDecodeError):
+        pass
+    return s
+
+
+def save_settings(**kw):
+    s = settings()
+    s.update({k: v for k, v in kw.items() if k in DEFAULTS})
+    with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
+        json.dump(s, f, ensure_ascii=False, indent=1)
+    return s
+
+
+def root():
+    return cleaner.archive_root()
+
+
+def abs_dir(rel):
+    return os.path.join(root(), rel)
+
+
+def protected_dirs(s=None):
+    s = s or settings()
+    return [abs_dir(p).rstrip("/") for p in s["protected"]]
+
+
+def is_protected(path, prot=None):
+    prot = protected_dirs() if prot is None else prot
+    return any(path.startswith(p + "/") for p in prot)
+
+
+def candidate_folders():
+    """Arayüzde 'olduğu gibi kalsın' seçimi için: arşivdeki birinci/ikinci seviye klasörler."""
+    s = settings()
+    skip = {s["photos_dir"], s["videos_dir"], s["inbox"], s["other_dir"]}
+    out = []
+    with db.db() as con:
+        rows = con.execute("SELECT folder, COUNT(*) n FROM media GROUP BY folder").fetchall()
+    agg = {}
+    r0 = root()
+    for r in rows:
+        rel = os.path.relpath(r["folder"], r0)
+        parts = rel.split("/")
+        if parts[0] in skip or len(parts) < 2:
+            continue
+        key = "/".join(parts[:2])
+        agg[key] = agg.get(key, 0) + r["n"]
+    for k, n in sorted(agg.items(), key=lambda x: x[0].lower()):
+        out.append({"path": k, "count": n, "protected": k in s["protected"]})
+    return out
+
+
+# ---------- Taşıma ----------
+
+def target_for(r, s):
+    base = s["photos_dir"] if r["kind"] == "photo" else s["videos_dir"]
+    if r.get("src"):  # ekran görüntüsü / kaydı ya da başka yerden kaydedilmiş
+        base = os.path.join(s["other_dir"], "Resimler" if r["kind"] == "photo" else "Videolar")
+    if r["date_source"] in ("exif", "google", "filename") and r["taken_at"]:
+        year = r["taken_at"][:4]
+    else:
+        year = "Tarihsiz"
+    return os.path.join(root(), base, year)
+
+
+def _free_name(d, name):
+    p = os.path.join(d, name)
+    if not os.path.exists(p):
+        return p
+    stem, ext = os.path.splitext(name)
+    k = 2
+    while os.path.exists(os.path.join(d, f"{stem} ({k}){ext}")):
+        k += 1
+    return os.path.join(d, f"{stem} ({k}){ext}")
+
+
+def _mv(src, dst):
+    os.makedirs(os.path.dirname(dst), exist_ok=True)
+    try:
+        os.rename(src, dst)
+    except OSError:
+        shutil.move(src, dst)
+
+
+def organize_files(batch):
+    """Korunmayan, yerinde olmayan her dosyayı Resimler/<yıl> veya Videolar/<yıl>'a taşır."""
+    s = settings()
+    prot = protected_dirs(s)
+    with db.db() as con:
+        rows = [dict(r) for r in con.execute("SELECT id,path,folder,kind,taken_at,date_source,src FROM media")]
+    todo = []
+    for r in rows:
+        if is_protected(r["path"], prot) or not os.path.isfile(r["path"]):
+            continue
+        dst_dir = target_for(r, s)
+        if r["folder"] != dst_dir:
+            todo.append((r, dst_dir))
+    state.update(phase="Resimler ve Videolar klasörlerine yerleştiriliyor", todo=len(todo), done=0)
+    moved = 0
+    for r, dst_dir in todo:
+        try:
+            dst = _free_name(dst_dir, os.path.basename(r["path"]))
+            extras = []
+            for sc in cleaner._sidecars(r["path"]):
+                sdst = dst + sc[len(r["path"]):] if sc.startswith(r["path"]) else \
+                    os.path.join(dst_dir, os.path.splitext(os.path.basename(dst))[0] + os.path.splitext(sc)[1])
+                _mv(sc, sdst)
+                extras.append([sc, sdst])
+            _mv(r["path"], dst)
+            with db.db() as con:
+                con.execute("UPDATE media SET path=?, folder=? WHERE id=?", (dst, dst_dir, r["id"]))
+                con.execute("INSERT INTO moves(media_id,src,dst,extras,batch) VALUES(?,?,?,?,?)",
+                            (r["id"], r["path"], dst, json.dumps(extras), batch))
+                con.execute("UPDATE pins SET path=? WHERE path=?", (dst, r["path"]))
+            moved += 1
+        except Exception:
+            traceback.print_exc()
+        state["done"] += 1
+    _remove_empty_dirs(prot, s)
+    return moved
+
+
+def _remove_empty_dirs(prot, s):
+    """Taşımadan sonra boş kalan eski klasörleri kaldırır (korunanlar, kökler ve Gelen hariç)."""
+    keep = {d.rstrip("/") for d in MEDIA_DIRS} | {abs_dir(s["inbox"]), abs_dir(s["photos_dir"]),
+                                                 abs_dir(s["videos_dir"]), abs_dir(s["other_dir"])}
+    junk = {".DS_Store", "Thumbs.db", "desktop.ini"}
+    for base in MEDIA_DIRS:
+        for d, dirs, files in os.walk(base, topdown=False):
+            if d.rstrip("/") in keep or any(d == p or d.startswith(p + "/") for p in prot):
+                continue
+            try:
+                left = [f for f in os.listdir(d) if f not in junk and not f.startswith("._")]
+                if not left:
+                    for f in os.listdir(d):
+                        os.remove(os.path.join(d, f))
+                    os.rmdir(d)
+            except OSError:
+                pass
+
+
+def undo_moves(batch):
+    """Bir düzenleme turunu geri alır: dosyalar eski klasörlerine döner."""
+    with db.db() as con:
+        rows = [dict(r) for r in con.execute(
+            "SELECT * FROM moves WHERE batch=? AND undone=0 ORDER BY id DESC", (batch,))]
+    n = 0
+    for m in rows:
+        if not os.path.isfile(m["dst"]):
+            continue
+        back = _free_name(os.path.dirname(m["src"]), os.path.basename(m["src"]))
+        _mv(m["dst"], back)
+        for src, dst in json.loads(m["extras"] or "[]"):
+            if os.path.exists(dst):
+                _mv(dst, src)
+        with db.db() as con:
+            con.execute("UPDATE media SET path=?, folder=? WHERE id=?", (back, os.path.dirname(back), m["media_id"]))
+            con.execute("UPDATE moves SET undone=1 WHERE id=?", (m["id"],))
+        n += 1
+    return n
+
+
+def move_batches():
+    with db.db() as con:
+        return [dict(r) for r in con.execute(
+            "SELECT batch, COUNT(*) n, SUM(undone) undone FROM moves GROUP BY batch ORDER BY batch DESC LIMIT 20")]
+
+
+# ---------- Tam akış ----------
+
+def apply_and_organize():
+    """Onaydan sonra: bulunan kopyaları çöpe at, kalanları düzenle."""
+    with _lock:
+        if state["running"]:
+            return False
+        state.update(running=True, phase="Çöp kutusuna taşınıyor", done=0, todo=0, error=None, kind="apply")
+
+    def go():
+        batch = datetime.now().strftime("%Y-%m-%d %H.%M")
+        try:
+            cleaner._apply(keep_running=True)
+            organize_files(batch)
+            save_settings(auto=True, last_full=batch)
+            state.update(phase="Tamamlandı", last_run=batch)
+        except Exception as e:
+            traceback.print_exc()
+            state.update(error=str(e), phase="Hata")
+        finally:
+            state.update(running=False, finished=time.time())
+    threading.Thread(target=go, daemon=True).start()
+    return True
+
+
+def run(full=True, apply_trash=True, scope=None):
+    """Tara → kopyaları bul → çöpe at → düzenle. Arka planda."""
+    with _lock:
+        if state["running"]:
+            return False
+        state.update(running=True, phase="Başlıyor", done=0, todo=0, error=None, kind="run")
+    threading.Thread(target=_run, args=(full, apply_trash, scope), daemon=True).start()
+    return True
+
+
+def _run(full, apply_trash, scope):
+    batch = datetime.now().strftime("%Y-%m-%d %H.%M")
+    try:
+        s = settings()
+        os.makedirs(abs_dir(s["inbox"]), exist_ok=True)
+        state["phase"] = "Arşiv taranıyor"
+        scanner.scan_now(None if full else scope)
+        state["phase"] = "Kopyalar aranıyor"
+        cleaner._find(s["include_bursts"], keep_running=True)
+        if apply_trash:
+            cleaner._apply(keep_running=True)
+            organize_files(batch)
+            if full:
+                save_settings(auto=True, last_full=batch)
+        state["phase"] = "Tamamlandı"
+        state["last_run"] = batch
+    except Exception as e:
+        traceback.print_exc()
+        state.update(error=str(e), phase="Hata")
+    finally:
+        state.update(running=False, finished=time.time())
+
+
+# ---------- Gelen kutusu izleyici ----------
+
+def _inbox_ready(path, quiet=120):
+    """Gelen kutusunda kopyalanması bitmiş (en az 2 dk dokunulmamış) medya var mı?"""
+    now = time.time()
+    found = False
+    for d, _, files in os.walk(path):
+        for f in files:
+            if f.startswith("."):
+                continue
+            if scanner._kind(f):
+                try:
+                    if now - os.path.getmtime(os.path.join(d, f)) < quiet:
+                        return False       # hâlâ kopyalanıyor olabilir, bekle
+                except OSError:
+                    continue
+                found = True
+    return found
+
+
+def _watch():
+    last_full = time.time()
+    while True:
+        time.sleep(300)
+        try:
+            s = settings()
+            if not s["auto"] or state["running"] or scanner.state["running"]:
+                continue
+            inbox = abs_dir(s["inbox"])
+            if os.path.isdir(inbox) and _inbox_ready(inbox):
+                run(full=False, scope=[inbox])
+            elif time.time() - last_full > 6 * 3600:   # 6 saatte bir tüm arşiv (başka yerlere eklenenler)
+                last_full = time.time()
+                run(full=True)
+        except Exception:
+            traceback.print_exc()
+
+
+threading.Thread(target=_watch, daemon=True).start()

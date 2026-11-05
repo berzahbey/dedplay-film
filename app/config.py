@@ -6,6 +6,10 @@ MUSIC_DIR = os.environ.get("MUSIC_DIR", "/media/music")
 MUSIC_DEFAULT = os.environ.get("MUSIC_DEFAULT", "muzaffer muzik")
 OUTPUT_DIR = os.environ.get("OUTPUT_DIR", "/output")
 DATA_DIR = os.environ.get("DATA_DIR", "/app/data")
+# Çöp kutusu: arşivle AYNI bağlama noktası altında olmalı (taşıma anında olsun, kopyalama değil)
+TRASH_DIR = os.environ.get("TRASH_DIR", "")
+# Eski sürümün yolları → yeni yollar (veritabanı yeniden taramaya gerek kalmadan güncellenir)
+PATH_MIGRATE = [tuple(x.split("=", 1)) for x in os.environ.get("PATH_MIGRATE", "").split(",") if "=" in x]
 
 DB_PATH = os.path.join(DATA_DIR, "dedplay-film.db")
 THUMB_DIR = os.path.join(DATA_DIR, "thumbs")
@@ -25,5 +29,5 @@ VIDEO_EXT = {".mp4", ".mov", ".m4v", ".3gp", ".mkv", ".avi", ".mts"}
 MUSIC_EXT = {".mp3", ".m4a", ".wav", ".flac", ".ogg", ".aac", ".opus"}
 SKIP_DIRS = {"@eaDir", ".thumbnails", ".trash", ".Trash", "#recycle", "@Recycle"}
 
-for d in (DATA_DIR, THUMB_DIR, WORK_DIR, OUTPUT_DIR):
+for d in (DATA_DIR, THUMB_DIR, WORK_DIR, OUTPUT_DIR) + ((TRASH_DIR,) if TRASH_DIR else ()):
     os.makedirs(d, exist_ok=True)
