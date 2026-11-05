@@ -106,6 +106,7 @@ button.ghost.red{color:var(--bad);border-color:#5a2226}
 
   <div class="card hide" id="grpCard">
     <h2>Kopya grupları <span class="muted" style="font-weight:400">— karelere tıklayarak birden fazlasını "Kalacak" yapabilirsin; "Atla" o gruba dokunmaz. Benzer kareler (farklı poz) sen onaylamadan silinmez.</span></h2>
+    <div class="row" style="margin-bottom:10px"><button class="btn" id="applyBtn2">2 · Onayla: çöpe gidecekleri çöp kutusuna taşı</button><span class="muted" id="applyInfo2"></span></div>
     <div class="chips" id="reasonChips"></div>
     <div id="groups"></div>
     <div class="row" style="margin-top:12px"><button class="ghost" id="moreGroups">Daha fazla göster</button></div>
@@ -218,7 +219,7 @@ async function status(){
   $('#pill').textContent=run?`⏳ ${ST.phase}`:(s.auto?'Otomatik düzen açık':'Otomatik düzen kapalı');
   $('#trashN').textContent=ST.trash.files?`(${fmt(ST.trash.files)})`:'';
   $('#howto').innerHTML=`Tüm arşiv taranır: kopyalar, farklı ad/boyuttaki aynı fotoğraflar, seri çekimler ve benzer kareler bulunur; her grupta <b>en iyisi</b> kalır, diğerleri <b>çöp kutusuna</b> gider. Kalanlar <b>${s.photos_dir}/&lt;yıl&gt;</b> ve <b>${s.videos_dir}/&lt;yıl&gt;</b> klasörlerine, ekran görüntüleri ve kaydedilenler <b>${s.other_dir}</b> klasörüne yerleşir. Olduğu gibi kalan klasörler: <b>${s.protected.join(', ')||'yok'}</b>. Yeni dosyaları <b>${s.inbox}</b> klasörüne at; otomatik işlenir.`;
-  $('#findBtn').disabled=$('#inboxBtn').disabled=run;$('#applyBtn').disabled=run;
+  $('#findBtn').disabled=$('#inboxBtn').disabled=run;$('#applyBtn2').disabled=run;$('#applyInfo2').textContent=ST.summary.files?`${fmt(ST.summary.files)} dosya (${gb(ST.summary.bytes)}) çöpe gidecek`:'';$('#applyBtn').disabled=run;
   $('#prog').classList.toggle('hide',!run&&!ST.error);
   const pct=ST.todo?Math.round(ST.done/ST.todo*100):0;
   $('#progTxt').textContent=ST.error?'Hata: '+ST.error:(run?`${ST.phase}${ST.todo?` — ${fmt(ST.done)} / ${fmt(ST.todo)}`:''}`:'');
@@ -229,7 +230,7 @@ async function status(){
   status.was=run;
 }
 function drawSummary(){
-  const m=ST.summary; $('#grpCard').classList.toggle('hide',!m.groups);
+  const m=ST.summary; $('#sumCard').classList.toggle('hide',!(m.groups||m.pending));$('#grpCard').classList.toggle('hide',!(m.groups||m.pending));
   $('#stats').innerHTML=`<div class="stat"><b>${fmt(m.files)}</b><span>dosya çöpe gidecek</span></div>
     <div class="stat"><b>${gb(m.bytes)}</b><span>yer açılacak</span></div>
     <div class="stat"><b>${fmt(m.groups)}</b><span>kopya grubu (her birinden 1 tane kalır)</span></div>
@@ -242,6 +243,7 @@ function drawSummary(){
 }
 $('#inboxBtn').onclick=async()=>{await post('/api/clean/inbox');status()};
 $('#findBtn').onclick=async()=>{await post('/api/clean/find',{include_bursts:true,include_similar:true});status()};
+$('#applyBtn2').onclick=()=>$('#applyBtn').click();
 $('#applyBtn').onclick=async()=>{const m=ST.summary;
   const msg=m.files?`${fmt(m.files)} dosya (${gb(m.bytes)}) çöp kutusuna taşınacak ve kalanlar Resimler/Videolar klasörlerine yerleştirilecek.`:'Çöpe gidecek kopya yok. Yerinde olmayan dosyalar (ör. canlı fotoğraf videoları) düzenlenecek.';
   if(!confirm(msg+`\n\nÇöp kutusundan / Son düzenlemeler'den her zaman geri alabilirsin. Devam edilsin mi?`))return;
