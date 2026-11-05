@@ -1,5 +1,8 @@
 import os
 
+# Uygulamanın oluşturduğu klasör/dosyaları herkes açabilsin (ZimaOS istemcisi, Samba, Finder)
+os.umask(0)
+
 # Klasörler (docker-compose içinde bağlanır)
 MEDIA_DIRS = [p.strip() for p in os.environ.get("MEDIA_DIRS", "/media/photos,/media/videos").split(",") if p.strip()]
 MUSIC_DIR = os.environ.get("MUSIC_DIR", "/media/music")

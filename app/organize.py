@@ -180,6 +180,7 @@ def organize_files(batch):
         state["done"] += 1
     moved += _place_live(lives, s, prot, batch)
     _remove_empty_dirs(prot, s)
+    fix_perms()
     return moved
 
 
@@ -338,6 +339,31 @@ def _migrate_trash():
                 ex2 = ex
             con.execute("UPDATE trash SET trash_path=?, extras=? WHERE id=?", (fix(r["trash_path"]), ex2, r["id"]))
     print(f"Çöp kutusu taşındı: {o} → {n}", flush=True)
+
+
+def fix_perms():
+    """Uygulamanın (root) oluşturduğu klasör ve dosyaları arşivin sahibine verir (ör. 1000:samba) ve
+    herkese açar; böylece ZimaOS istemcisinde, Samba'da, Finder'da seçilip düzenlenebilirler."""
+    try:
+        st = os.stat(root())
+    except OSError:
+        return
+    uid, gid = st.st_uid, st.st_gid
+    if uid == 0:
+        return
+    bases = list(MEDIA_DIRS) + ([TRASH_DIR] if TRASH_DIR else [])
+    for base in bases:
+        if not os.path.isdir(base):
+            continue
+        for d, dirs, files in os.walk(base):
+            for p, mode in [(d, 0o777)] + [(os.path.join(d, f), 0o666) for f in files]:
+                try:
+                    s = os.lstat(p)
+                    if s.st_uid == 0:
+                        os.lchown(p, uid, gid)
+                        os.chmod(p, mode if os.path.isdir(p) else (s.st_mode & 0o777) | 0o666)
+                except OSError:
+                    pass
 
 
 def undo_moves(batch):
@@ -510,5 +536,6 @@ try:
     migrate_layout()
 except Exception:
     traceback.print_exc()
+threading.Thread(target=fix_perms, daemon=True).start()
 threading.Thread(target=_migrate_soon, daemon=True).start()
 threading.Thread(target=_watch, daemon=True).start()
