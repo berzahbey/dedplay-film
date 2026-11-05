@@ -12,7 +12,7 @@ from datetime import datetime
 
 from . import db
 from .analyze import analyze_item
-from .config import MEDIA_DIRS, PHOTO_EXT, VIDEO_EXT, SKIP_DIRS
+from .config import TRASH_DIR, MEDIA_DIRS, PHOTO_EXT, VIDEO_EXT, SKIP_DIRS
 
 state = {"running": False, "phase": "", "found": 0, "done": 0, "todo": 0, "new": 0, "removed": 0,
          "analyzed": 0, "duplicates": 0,
@@ -149,7 +149,8 @@ def _walk(roots=None):
         if not os.path.isdir(root):
             continue
         for d, dirs, files in os.walk(root):
-            dirs[:] = [x for x in dirs if x not in SKIP_DIRS and not x.startswith(".")]
+            dirs[:] = [x for x in dirs if x not in SKIP_DIRS and not x.startswith(".")
+                       and os.path.join(d, x).rstrip("/") != TRASH_DIR.rstrip("/")]   # çöp kutusu taranmaz
             for f in files:
                 if f.startswith("."):
                     continue

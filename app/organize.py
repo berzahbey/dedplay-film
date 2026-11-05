@@ -267,7 +267,8 @@ def _remove_empty_dirs(prot, s):
     junk = {".DS_Store", "Thumbs.db", "desktop.ini"}
     for base in MEDIA_DIRS:
         for d, dirs, files in os.walk(base, topdown=False):
-            if d.rstrip("/") in keep or any(d == p or d.startswith(p + "/") for p in prot):
+            if d.rstrip("/") in keep or any(d == p or d.startswith(p + "/") for p in prot) \
+                    or (TRASH_DIR and (d == TRASH_DIR.rstrip("/") or d.startswith(TRASH_DIR.rstrip("/") + "/"))):
                 continue
             try:
                 left = [f for f in os.listdir(d) if f not in junk and not f.startswith("._")]
@@ -306,6 +307,37 @@ def migrate_layout():
             con.execute("UPDATE trash SET orig_path=? || substr(orig_path, ?) WHERE substr(orig_path, 1, ?) = ?",
                         (np_, L + 1, L, op))
         print(f"Klasör taşındı: {o} → {n}", flush=True)
+    _migrate_trash()
+
+
+def _migrate_trash():
+    """Çöp kutusu klasörü yer değiştirdiyse (ör. Arşiv altına) içindekileri olduğu gibi taşı, kayıtları güncelle."""
+    if not TRASH_DIR:
+        return
+    o, n = os.path.join(root(), "Dedplay Çöp Kutusu"), TRASH_DIR.rstrip("/")
+    if o == n or not os.path.isdir(o):
+        return
+    if os.path.isdir(n) and os.listdir(n):
+        return
+    try:
+        os.makedirs(os.path.dirname(n), exist_ok=True)
+        if os.path.isdir(n):
+            os.rmdir(n)
+        os.rename(o, n)
+    except OSError:
+        traceback.print_exc()
+        return
+    op, np_ = o + "/", n + "/"
+    fix = lambda p: np_ + p[len(op):] if isinstance(p, str) and p.startswith(op) else p
+    with db.db() as con:
+        for r in con.execute("SELECT id, trash_path, extras FROM trash").fetchall():
+            ex = r["extras"]
+            try:
+                ex2 = json.dumps([[a, fix(b)] for a, b in json.loads(ex)]) if ex else ex
+            except Exception:
+                ex2 = ex
+            con.execute("UPDATE trash SET trash_path=?, extras=? WHERE id=?", (fix(r["trash_path"]), ex2, r["id"]))
+    print(f"Çöp kutusu taşındı: {o} → {n}", flush=True)
 
 
 def undo_moves(batch):
@@ -443,8 +475,22 @@ def _watch():
             traceback.print_exc()
 
 
+def _migrate_soon():
+    """Eski Resimler/Videolar klasörlerinde dosya kaldıysa (otomatik düzen açıkken) birazdan yerine taşı."""
+    time.sleep(120)
+    try:
+        s = settings()
+        left = any(os.path.isdir(abs_dir(OLD_LAYOUT[k])) and abs_dir(OLD_LAYOUT[k]) != abs_dir(s[k])
+                   for k in ("photos_dir", "videos_dir"))
+        if left and s["auto"] and not state["running"] and not scanner.state["running"]:
+            run(full=True)
+    except Exception:
+        traceback.print_exc()
+
+
 try:
     migrate_layout()
 except Exception:
     traceback.print_exc()
+threading.Thread(target=_migrate_soon, daemon=True).start()
 threading.Thread(target=_watch, daemon=True).start()
