@@ -134,7 +134,7 @@ def organize_files(batch):
     prot = protected_dirs(s)
     with db.db() as con:
         rows = [dict(r) for r in con.execute(
-            "SELECT id,path,folder,kind,taken_at,date_source,src,live_of,duration,size FROM media")]
+            "SELECT id,path,folder,kind,taken_at,date_source,src,live_of,duration,size,short_photo FROM media")]
     lives = [r for r in rows if r["live_of"]]
     rows = [r for r in rows if not r["live_of"]]
     if s.get("short_mode") == "trash" and cleaner.TRASH_DIR:
@@ -173,19 +173,37 @@ def organize_files(batch):
     return moved
 
 
+def save_short_frame(r, s=None):
+    """Kısa videonun arşivde benzer fotoğrafı yoksa en net karesini fotoğraf olarak kaydeder.
+    Dönüş: (fotoğrafı zaten vardı mı, yeni kaydedilen fotoğrafın yolu ya da None)."""
+    from . import shorts
+    s = s or settings()
+    r.setdefault("short_photo", None)
+    has = shorts.check([r])[r["id"]]
+    if has:
+        return True, None
+    dest = target_for({"kind": "photo", "date_source": r.get("date_source"), "taken_at": r.get("taken_at"),
+                       "src": None}, s)
+    return False, shorts.best_frame_to_photo(r, dest)
+
+
 def _trash_short(rows, prot, batch):
-    """Fotoğrafına bağlanamayan, 4 saniyeden kısa video parçalarını çöpe atar."""
+    """Fotoğrafına bağlanamayan, 4 saniyeden kısa video parçalarını çöpe atar.
+    Önce: arşivde benzer fotoğrafı yoksa en net karesi fotoğraf olarak kaydedilir (an kaybolmaz)."""
     keep = []
+    s = settings()
     for r in rows:
         if (r["kind"] == "video" and r["duration"] is not None and r["duration"] < 4
                 and not is_protected(r["path"], prot) and os.path.isfile(r["path"])):
             try:
+                had, newp = save_short_frame(r, s)
                 dst = cleaner._move(r["path"], os.path.join(cleaner.TRASH_DIR, batch, os.path.relpath(r["path"], root())))
                 with db.db() as con:
                     con.execute("INSERT INTO trash(media_id,kind,orig_path,trash_path,size,taken_at,reason,"
                                 "keeper_path,extras,batch) VALUES(?,?,?,?,?,?,?,?,?,?)",
-                                (r["id"], "video", r["path"], dst, r["size"], r["taken_at"], "çok kısa video",
-                                 "", "[]", batch))
+                                (r["id"], "video", r["path"], dst, r["size"], r["taken_at"],
+                                 "çok kısa video" + ("" if had else " (karesi fotoğraf olarak kaydedildi)"),
+                                 newp or "", "[]", batch))
                     con.execute("DELETE FROM media WHERE id=?", (r["id"],))
                 continue
             except Exception:

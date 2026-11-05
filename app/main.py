@@ -500,7 +500,16 @@ def library(kind: str = "photo", year: str | None = None, offset: int = 0, limit
                             args).fetchone()[0]
         rows = con.execute(q + " ORDER BY taken_at DESC LIMIT ? OFFSET ?", args + [limit, offset]).fetchall()
     root = cleaner.archive_root()
-    return {"total": total, "items": [{"id": r["id"], "name": os.path.basename(r["path"]),
-                                       "folder": os.path.relpath(os.path.dirname(r["path"]), root),
-                                       "taken_at": r["taken_at"], "duration": r["duration"],
-                                       "kind": r["kind"]} for r in rows]}
+    items = [{"id": r["id"], "name": os.path.basename(r["path"]),
+              "folder": os.path.relpath(os.path.dirname(r["path"]), root),
+              "taken_at": r["taken_at"], "duration": r["duration"], "kind": r["kind"]} for r in rows]
+    if short and rows:  # her kısa video için: arşivde fotoğrafı var mı?
+        from . import shorts
+        with db.db() as con:
+            vs = [dict(x) for x in con.execute(
+                f"SELECT id, path, duration, short_photo FROM media WHERE id IN ({','.join('?' * len(rows))})",
+                [r["id"] for r in rows])]
+        has = shorts.check(vs)
+        for it in items:
+            it["has_photo"] = bool(has.get(it["id"]))
+    return {"total": total, "items": items}

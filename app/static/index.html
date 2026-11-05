@@ -284,7 +284,8 @@ async function loadLib(reset){if(reset){lib.off=0;lib.items=[];lib.sel=new Set()
   const r=await api(`/api/library?kind=${lib.kind}&offset=${lib.off}&limit=${sh?500:120}${sh}${lib.year?'&year='+encodeURIComponent(lib.year):''}`);
   const start=lib.items.length;lib.items.push(...r.items);lib.off+=r.items.length;
   $('#libInfo').textContent=`${fmt(r.total)} ${{photo:'resim',video:'video',other:'dosya'}[lib.kind]}`;
-  $('#libGrid').insertAdjacentHTML('beforeend',r.items.map((i,k)=>`<div class="th" data-i="${start+k}" data-id="${i.id}" title="${i.folder}/${i.name}\n${i.taken_at}"><img loading="lazy" src="/api/thumb/${i.id}">${i.duration?`<span class="b">▶ ${Math.round(i.duration)} sn</span>`:''}</div>`).join(''));
+  $('#libGrid').insertAdjacentHTML('beforeend',r.items.map((i,k)=>`<div class="th" data-i="${start+k}" data-id="${i.id}" title="${i.folder}/${i.name}\n${i.taken_at}"><img loading="lazy" src="/api/thumb/${i.id}">${i.duration?`<span class="b">▶ ${Math.round(i.duration)} sn</span>`:''}${i.has_photo===undefined?'':`<span class="b" style="left:auto;right:5px;top:5px;bottom:auto;background:${i.has_photo?'#163d2b':'#2a2214'}">${i.has_photo?'📷 fotoğrafı var':'📷 karesi kaydedilecek'}</span>`}</div>`).join(''));
+  if(sh)$('#libInfo').textContent+=` · "fotoğrafı var" olanların aynısı arşivde resim olarak duruyor; "karesi kaydedilecek" olanların en net karesi çöpe atılmadan önce fotoğraf olarak saklanır`;
   $('#libMore').classList.toggle('hide',lib.off>=r.total)}
 $('#libMore').onclick=()=>loadLib(false);
 $('#libGrid').onclick=e=>{const t=e.target.closest('.th');if(!t)return;

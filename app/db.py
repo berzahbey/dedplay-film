@@ -82,7 +82,7 @@ def init():
                           ("model", "TEXT"), ("software", "TEXT"), ("ucomment", "TEXT"),
                           ("src_checked", "INTEGER"), ("src", "TEXT"), ("smiles", "INTEGER"),
                           ("fsharp", "REAL"), ("expo", "REAL"), ("q_done", "INTEGER"),
-                          ("live_id", "TEXT"), ("live_of", "INTEGER")):
+                          ("live_id", "TEXT"), ("live_of", "INTEGER"), ("short_photo", "INTEGER")):
             if name not in cols:
                 con.execute(f"ALTER TABLE media ADD COLUMN {name} {typ}")
         # Eski sürümün 64 bitlik izleri ve analiz edilmemiş videolar yeniden analiz edilir

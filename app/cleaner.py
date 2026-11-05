@@ -429,11 +429,23 @@ def trash_ids(ids, reason):
     root = archive_root()
     with db.db() as con:
         rows = [dict(r) for r in con.execute(
-            f"SELECT id,kind,path,size,taken_at FROM media WHERE id IN ({','.join('?' * len(ids))})", list(ids))]
+            f"SELECT id,kind,path,size,taken_at,date_source,duration,short_photo FROM media "
+            f"WHERE id IN ({','.join('?' * len(ids))})", list(ids))]
     n = 0
+    from .organize import save_short_frame
     for m in rows:
         if not os.path.isfile(m["path"]):
             continue
+        note = ""
+        if m["kind"] == "video" and (m["duration"] or 0) < 4:
+            # kısa video: benzer fotoğrafı yoksa önce en net karesini fotoğraf olarak sakla
+            try:
+                had, newp = save_short_frame(m)
+                if newp:
+                    note = " (karesi fotoğraf olarak kaydedildi)"
+            except Exception:
+                traceback.print_exc()
+                continue  # kare alınamadıysa videoya dokunma
         dst = _move(m["path"], os.path.join(TRASH_DIR, batch, os.path.relpath(m["path"], root)))
         extras = []
         with db.db() as con:
@@ -448,7 +460,7 @@ def trash_ids(ids, reason):
         with db.db() as con:
             con.execute("INSERT INTO trash(media_id,kind,orig_path,trash_path,size,taken_at,reason,keeper_path,"
                         "extras,batch) VALUES(?,?,?,?,?,?,?,?,?,?)",
-                        (m["id"], m["kind"], m["path"], dst, m["size"], m["taken_at"], reason, "",
+                        (m["id"], m["kind"], m["path"], dst, m["size"], m["taken_at"], reason + note, "",
                          json.dumps(extras), batch))
             con.execute("DELETE FROM media WHERE id=?", (m["id"],))
         n += 1
