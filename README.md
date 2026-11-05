@@ -1,83 +1,97 @@
-# Dedplay Arşiv — Kopya Temizleyici ve Düzenleyici
+# Dedplay Arşiv
 
-Fotoğraf ve video arşivini tarar, kopyaları ayıklar ve her şeyi düzenli klasörlere yerleştirir.
-
-- **Kopyalar:** Birebir aynı dosyalar; farklı ad, boyut ya da sıkıştırmadaki aynı görüntüler (WhatsApp, Google Fotoğraflar kopyaları, yeniden kaydedilmiş videolar); seri çekimler. Her grupta **en iyisi** kalır: gerçek çekim tarihi, en yüksek çözünürlük, en net, gözleri açık olan. Diğerleri **çöp kutusuna taşınır**, silinmez.
-- **Düzen:** `Resimler/<yıl>`, `Videolar/<yıl>`. Ekran görüntüleri, ekran kayıtları ve WhatsApp/Instagram/TikTok/TV gibi başka yerlerden kaydedilenler `Ekran ve Kaydedilenler/Resimler|Videolar/<yıl>` klasörüne gider. Tarihi bilinmeyenler `Tarihsiz` klasörüne konur.
-- **Korunan klasörler** (ör. `video/kenan dugun`, `video/Necla video`, `Photos/muzaffer resim`) olduğu gibi kalır. İçlerindeki dosyalar taşınmaz ve asla çöpe atılmaz.
-- **Gelen kutusu:** Yeni dosyaları `/DATA/Media/Gelen` klasörüne at. 5 dakikada bir işlenir: kopyaysa çöpe, değilse yerine. Ayrıca 6 saatte bir tüm arşiv kontrol edilir.
-- **Çöp kutusu:** `/DATA/Media/Dedplay Çöp Kutusu`. Klasör yapısı korunur. Tek tek, seçerek ya da hepsini geri alabilir veya kalıcı silebilirsin. Geri alınan dosya bir daha çöpe atılmaz.
-- **Geri alma:** Her düzenleme turu kaydedilir. "Son düzenlemeler" bölümünden dosyalar eski klasörlerine geri döndürülebilir.
-- **Sekmeler:** Tüm resimler, Tüm videolar, Ekran & kaydedilenler (yıla göre galeri, büyük görüntüleme), Çöp kutusu, Ayarlar.
-
-Eski film bölümü `/film` adresinde duruyor (deneysel).
-
----
-
-## (Eski) Dedplay Film
-
-Fotoğraf ve video arşivini, uğraşmadan kaliteli bir filme çeviren ev sunucusu uygulaması.
-"2025" de, süreyi seç, gerisini uygulama yapar.
+Ev sunucusundaki (ZimaOS) fotoğraf ve video arşivini tarar, kopyaları ayıklar ve her şeyi yıllara göre düzenli klasörlere yerleştirir. iPhone yedeklerini kendiliğinden alıp işler. Yüz tanıma ile kişilere göre de gezinebilirsin.
 
 ## Ne yapar?
 
-1. **Arşivi tarar.** Her dosyanın çekim tarihini (EXIF, Google Takeout .json, dosya adı) ve konumunu okur, sonra netliğini ve görsel izini çıkarır. En yeni dosyalardan başlar. Tarama sürerken film yapılabilir.
-2. **Kopyaları ayıklar.** Adı, boyutu ya da sıkıştırması farklı olsa da görüntüsü aynı olan fotoğraf ve videolar (WhatsApp kopyaları, Google Fotoğraflar yedekleri, yeniden kaydedilmiş videolar) filme bir kez girer. Her grupta en iyi kopya kalır: gerçek çekim tarihi olan ve en yüksek çözünürlüklü olan.
-3. **En iyi kareleri seçer.** Art arda çekilmiş benzer kareleri, bulanık fotoğrafları, ekran görüntülerini ve Live Photo videolarını eler. Seçilen süreye göre dönem boyunca dengeli seçim yapar.
-4. **Uzun videolarda en iyi anları bulur.** Ses canlılığı (konuşma, gülüşme), hareket, netlik ve aydınlığa bakar. Video boyunca birbirinden uzak 1-6 kesit seçer ve kesme noktalarını sessiz anlara kaydırır.
-5. **Sahne kurgusu yapar.** Bir video çekilirken ya da hemen öncesinde/sonrasında aynı rotada çekilen fotoğraflar o videoya "ara plan" olur: video oynarken ekrana gelir, videonun sesi kesilmez. Art arda çekilmiş iki dikey fotoğraf yan yana tek karede gösterilir.
-6. **Efektler:**
-   - Ken Burns hareketi
-   - Geçiş efektleri
-   - Müziğin ritmine göre kesme
-   - Renk stilleri: Sade, Sinematik, Enerjik
-   - İsteğe bağlı sinema bantları
-   - Titreyen videolar sabitlenir (vidstab), fotoğraf hareketleri alt-piksel hassasiyetle titremesiz
-   - Yan/ters kaydedilmiş videolar: yüzlere bakılarak otomatik ya da önizlemede ↻ ile elle döndürme
-   - Dikey, kare ve 4:3 videolar tam ekran: yüzü ve hareketi takip eden akıllı kırpma, kameraman gibi yumuşak hareket
-   - iPhone HDR renk düzeltmesi
-   - Açılış, bölüm ve kapanış başlıkları
-7. **Ses:** Müzik sırayla ve geçişli çalar. Videoda konuşma olduğunda müzik otomatik kısılır. Videoların sesi eşitlenir ve uğultu filtrelenir.
-8. **Çıktı:** 1080p MP4 dosyası, `/DATA/Media/Movies/Dedplay Film` klasörüne yazılır.
+- **Kopyalar:** Birebir aynı dosyalar; adı, boyutu ya da sıkıştırması farklı ama görüntüsü aynı olanlar (WhatsApp, Google Fotoğraflar kopyaları, yeniden kaydedilmiş videolar); seri çekimler; aynı sahne ve aynı kişilerle çekilmiş benzer kareler. Her grupta **en iyisi** kalır (gerçek çekim tarihi, yüksek çözünürlük, netlik, açık gözler, gülümseme). Diğerleri **çöp kutusuna** gider; hiçbir şey kendiliğinden kalıcı silinmez.
+- **Düzen:**
+  ```
+  /DATA/Media/
+  ├─ Photos/<yıl>/                       tüm fotoğraflar
+  ├─ video/<yıl>/                        tüm videolar
+  └─ Arsiv/
+     ├─ Gelen/                           yeni dosyalar (otomatik işlenir)
+     ├─ Ekran ve Kaydedilenler/Resimler|Videolar/<yıl>
+     └─ Dedplay Cop Kutusu/              çöp kutusu (taranmaz)
+  ```
+  Çekim tarihi bilinmeyenler `Tarihsiz` klasörüne gider. Canlı fotoğrafların (Live Photo) videoları fotoğrafın yanında kalır.
+- **Korunan klasörler** (Ayarlar'dan seçilir) olduğu gibi kalır: içlerindeki dosyalar taşınmaz, çöpe atılmaz.
+- **Gelen kutusu:** `Arsiv/Gelen` 5 dakikada bir işlenir: arşivde zaten varsa çöpe ("zaten arşivde"), daha kalitelisiyse arşivdekinin yerine geçer, yeniyse yerine yerleşir. 6 saatte bir tüm arşiv de kontrol edilir.
+- **iPhone yedeği:** ZimaOS istemcisinin yedeklediği klasör (ör. `/DATA/Backup/iPhone 14 Plus`) her dakika kontrol edilir; yüklemesi biten dosyalar Gelen'e alınıp işlenir.
+- **Kişiler:** Yüzler bulunur ve kişilere ayrılır. İsim ver, aynı kişinin kartlarını birleştir (aynı ismi vermek de birleştirir), yanlış fotoğrafları "Bu kişi olmayanları seç" ile çıkar.
+- **Çöp kutusu:** Her tur kendi klasöründe ("2026-11-05 14.30 Gelen"). Tek tek, seçerek ya da hepsini geri al / kalıcı sil.
+- **Geri alma:** Her düzenleme turu kaydedilir; "Son düzenlemeler"den dosyalar eski yerlerine döndürülebilir.
+- **Galeri:** Tüm resimler, Tüm videolar, Ekran & kaydedilenler — yeniden eskiye, sağda yıllar, büyük görüntüleme.
 
-Tamamen ücretsiz, açık kaynak araçlarla (FFmpeg, ExifTool, Pillow) çalışır. Dışarıya hiçbir veri gönderilmez.
+---
 
-## Kurulum (dedplay sunucusu)
+## Kurulum
+
+İki yol var. **A** en kolayıdır (ZimaOS arayüzünden, terminal gerekmez). **B** kaynak koddan derler.
+
+### A) ZimaOS arayüzünden (hazır imaj)
+
+1. ZimaOS → **App Store** → sağ üstte **+** → **Install a customized app** (Özel uygulama yükle) → **Import** (İçe aktar).
+2. Repodaki [`zimaos.yaml`](zimaos.yaml) dosyasının içeriğini yapıştır.
+3. Gerekirse klasörleri değiştir (aşağıdaki "Ayarlanacaklar"), **Install**.
+4. Tarayıcıda `http://<sunucu-ip>:8090` aç.
+
+> İmaj GitHub'da her push'ta otomatik derlenir: `ghcr.io/berzahbey/dedplay-film:latest` (Actions sekmesinden izlenir).
+> İlk derlemeden sonra GitHub'da bir kez **Profil → Packages → dedplay-film → Package settings → Change visibility → Public**
+> yap; yoksa ZimaOS imajı indiremez. Güncellemek için: `docker compose pull && docker compose up -d` ya da ZimaOS'ta uygulamayı yeniden kur.
+
+### B) Terminalden, kaynak koddan
 
 ```bash
-cd /DATA/AppData
+mkdir -p /DATA/AppData && cd /DATA/AppData
 git clone https://github.com/berzahbey/dedplay-film.git dedplay-film-src
 cd dedplay-film-src
-mkdir -p "/DATA/Media/Movies/Dedplay Film" /DATA/AppData/dedplay-film
+# gerekirse docker-compose.yml içindeki klasörleri düzenle
 docker compose up -d --build
 ```
 
-Uygulama şu adreste açılır: `http://<sunucu-ip>:8090`
+İlk derleme 10-15 dk sürebilir (yüz tanıma modeli ~100 MB indirilir).
 
-Güncellemek için:
-
+**Güncelleme:**
 ```bash
 cd /DATA/AppData/dedplay-film-src && git pull && docker compose up -d --build
 ```
 
-## Klasörler
+---
 
-| Sunucuda | Container'da | Not |
+## Ayarlanacaklar
+
+| Ne | Nerede | Varsayılan |
 |---|---|---|
-| /DATA/Media/Photos | /media/photos | salt okunur |
-| /DATA/Media/video | /media/videos | salt okunur |
-| /DATA/Media/Music/music | /media/music | salt okunur, varsayılan klasör: `muzaffer muzik` |
-| /DATA/Media/Movies/Dedplay Film | /output | bitmiş filmler |
-| /DATA/AppData/dedplay-film | /app/data | veritabanı, küçük resimler, geçici dosyalar |
+| Arşiv (fotoğraf/video ana klasörü) | `volumes: - /DATA/Media:/archive` | `/DATA/Media` |
+| Taranan klasörler | `MEDIA_DIRS` | `Photos, video, Arsiv` |
+| Çöp kutusu | `TRASH_DIR` | `/archive/Arsiv/Dedplay Cop Kutusu` |
+| iPhone yedek klasörü | `volumes: - /DATA/Backup:/backup` ve `INBOX_FEEDS` | `/backup/iPhone 14 Plus` |
+| Veritabanı, ayarlar, küçük resimler | `volumes: - /DATA/AppData/dedplay-film:/app/data` | |
+| Port | `ports: - "8090:8000"` | `8090` |
+
+- Telefonunun adı farklıysa `INBOX_FEEDS` içindeki `iPhone 14 Plus` kısmını `/DATA/Backup` altındaki klasör adıyla değiştir. Birden fazla telefon için virgülle ayır: `INBOX_FEEDS=/backup/iPhone 14 Plus,/backup/iPhone 13`.
+- iPhone yedeği kullanmıyorsan `INBOX_FEEDS` satırını ve `/DATA/Backup` bağlantısını silebilirsin.
+- Korunacak klasörler, canlı fotoğraf ve kısa video davranışı, otomatik düzen: uygulamada **⚙ Ayarlar**.
+- Klasör adlarında Türkçe karakter kullanma (ş, ç, ö…): ZimaOS istemcisi bunları seçemeyebilir.
 
 ## İlk kullanım
 
-1. **Arşivi tara**'ya bas. İlk tarama büyük bir arşivde birkaç saat sürebilir. Sonraki taramalar sadece yeni dosyalara bakar.
-2. Bir yıl (veya tarih aralığı ya da klasör) seç, film süresini seç, sonra **Kareleri seç**'e bas.
-3. Önizlemede istemediğin karelere tıklayıp çıkar.
-4. Müzikleri işaretle ve **Filmi oluştur**'a bas.
+1. **Temizle & Düzenle → 1 · Kopyaları bul.** Tüm arşiv taranır (büyük arşivde ilk tarama birkaç saat sürebilir; sayfayı kapatabilirsin).
+2. Bitince **Onayla**: kopyalar çöpe, kalanlar yerine. Bundan sonra **otomatik düzen** kendiliğinden açılır.
+3. Yüz taraması arka planda kendiliğinden başlar; **👤 Kişiler** sekmesi dolar.
+4. **Çöp kutusu**'na göz at; istediğini geri al, gerisini kalıcı sil.
 
-## Yol haritası
+## Sorun giderme
 
-- v3: Video titreme giderme (vidstab), yapay zekâ ile rüzgar ve gürültü temizliği (DeepFilterNet), cihaz saat düzeltme, yüz tanıyarak kırpma, GPS'ten yer adları
-- v4: Yerel yapay zekâ ile başlık ve hikâye, seslendirme, dikey Reels özeti
+```bash
+docker logs dedplay-film --tail 50                     # hata var mı
+docker logs dedplay-film 2>&1 | grep -i besleyen       # iPhone yedeğinden alınan dosyalar
+curl -s localhost:8090/api/clean/status | head -c 400  # şu anki iş
+```
+
+- **ZimaOS istemcisinde klasör seçilemiyor:** istemcinin iPhone yedeği yalnızca kendi `Backup` klasörüne gider ve sonradan değiştirilemez; uygulama o klasörü zaten izliyor, seçmene gerek yok.
+- **Dosyalar Tarihsiz'e gidiyor:** dosya çekim tarihini kaybetmiş (bazı paylaşım yolları EXIF'i siler). Orijinal dosyayı gönder (AirDrop, ZimaOS yedeği, kabloyla).
+
+Eski film bölümü `/film` adresinde duruyor (deneysel).

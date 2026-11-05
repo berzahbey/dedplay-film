@@ -19,7 +19,7 @@ services:
       - MUSIC_DEFAULT=muzaffer muzik
       - OUTPUT_DIR=/archive/Movies/Dedplay Film
     volumes:
-      # Yazma izinli: kopyalar çöp kutusuna taşınır, kalanlar Resimler/Videolar'a yerleşir.
+      # Yazma izinli: kopyalar çöp kutusuna taşınır, kalanlar Photos/video klasörlerine yerleşir.
       # Kalıcı silme sadece arayüzdeki "kalıcı sil" ile olur.
       - /DATA/Media:/archive
       # ZimaOS client yedekleri (yalnızca INBOX_FEEDS'teki klasörlere dokunulur)

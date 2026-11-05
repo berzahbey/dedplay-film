@@ -1,0 +1,65 @@
+# Dedplay Arşiv — ZimaOS "Install a customized app → Import" için
+# Hazır imaj kullanır (GitHub Actions ile derlenir). Klasörleri kendine göre değiştir.
+name: dedplay-film
+services:
+  dedplay-film:
+    image: ghcr.io/berzahbey/dedplay-film:latest
+    container_name: dedplay-film
+    ports:
+      - "8090:8000"
+    environment:
+      - TZ=Europe/Amsterdam
+      - MEDIA_DIRS=/archive/Photos,/archive/video,/archive/Arsiv
+      - TRASH_DIR=/archive/Arsiv/Dedplay Cop Kutusu
+      # ZimaOS iPhone yedeği (telefonunun adıyla değiştir; kullanmıyorsan bu satırı sil)
+      - INBOX_FEEDS=/backup/iPhone 14 Plus
+      - MUSIC_DIR=/archive/Music/music
+      - OUTPUT_DIR=/archive/Movies/Dedplay Film
+    volumes:
+      - type: bind
+        source: /DATA/Media
+        target: /archive
+      - type: bind
+        source: /DATA/Backup
+        target: /backup
+      - type: bind
+        source: /DATA/AppData/dedplay-film
+        target: /app/data
+    restart: unless-stopped
+    x-casaos:
+      envs:
+        - container: INBOX_FEEDS
+          description:
+            en_us: ZimaOS iPhone backup folder(s) to import, comma separated
+        - container: MEDIA_DIRS
+          description:
+            en_us: Archive folders to scan
+      ports:
+        - container: "8000"
+          description:
+            en_us: Web UI
+      volumes:
+        - container: /archive
+          description:
+            en_us: Photo/video archive (Photos, video, Arsiv)
+        - container: /backup
+          description:
+            en_us: ZimaOS client backups
+        - container: /app/data
+          description:
+            en_us: Database, settings, thumbnails
+x-casaos:
+  architectures:
+    - amd64
+  main: dedplay-film
+  author: berzahbey
+  category: Media
+  description:
+    en_us: Cleans duplicate photos/videos, organizes the archive by year, imports iPhone backups, face recognition.
+  tagline:
+    en_us: Photo & video archive cleaner
+  title:
+    en_us: Dedplay Arşiv
+  index: /
+  port_map: "8090"
+  scheme: http
