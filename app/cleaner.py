@@ -205,8 +205,9 @@ def _find(include_bursts, keep_running=False):
             with db.db() as con:
                 con.executemany("UPDATE media SET faces=?, eyes=? WHERE id=?", [(f, e, m) for m, f, e in res])
 
-        from .organize import protected_dirs
+        from .organize import abs_dir, protected_dirs, settings
         prot = protected_dirs()
+        inbox = abs_dir(settings()["inbox"]).rstrip("/") + "/"
         out = []
         for gi, g in enumerate(sorted(groups, key=lambda g: min(r["taken_at"] or "" for r in g))):
             for r in g:
@@ -214,7 +215,8 @@ def _find(include_bursts, keep_running=False):
                 # Korunan klasördeki ya da çöpten geri alınmış dosya asla çöpe gitmez.
                 # Korunan klasördeki kopya tercihen "kalan" olur; geri alınan ise sadece dokunulmaz kalır.
                 r["locked"] = bool(r.get("pinned")) or in_prot
-                r["score"] = score(r) + (1000 if in_prot else 0)
+                # Gelen'deki dosya arşivdekiyle aynı kalitedeyse arşivdeki kalır (Gelen'deki daha iyiyse o kalır)
+                r["score"] = score(r) + (1000 if in_prot else 0) - (0.5 if r["path"].startswith(inbox) else 0)
             g.sort(key=lambda r: -r["score"])
             reasons = {reason[r["id"]] for r in g}
             out.append({
@@ -333,6 +335,8 @@ def _apply(keep_running=False):
         root = archive_root()
         todo = [(g, m) for g in groups if not g["skip"] for m in g["members"]
                 if m["id"] != g["keep"] and not m.get("locked")]
+        from .organize import abs_dir, settings
+        inbox = abs_dir(settings()["inbox"]).rstrip("/") + "/"
         state["todo"] = len(todo)
         moved_ids = set()
         for g, m in todo:
@@ -355,7 +359,8 @@ def _apply(keep_running=False):
             with db.db() as con:
                 con.execute("INSERT INTO trash(media_id,kind,orig_path,trash_path,size,taken_at,reason,"
                             "keeper_path,extras,batch) VALUES(?,?,?,?,?,?,?,?,?,?)",
-                            (m["id"], g["kind"], m["path"], dst, m["size"], m["taken_at"], g["reason"],
+                            (m["id"], g["kind"], m["path"], dst, m["size"], m["taken_at"],
+                             "zaten arşivde" if m["path"].startswith(inbox) else g["reason"],
                              keeper["path"], json.dumps(extras), batch))
                 con.execute("DELETE FROM media WHERE id=?", (m["id"],))
             moved_ids.add(m["id"])

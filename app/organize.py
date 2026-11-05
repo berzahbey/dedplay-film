@@ -155,6 +155,7 @@ def organize_files(batch):
                 con.execute("INSERT INTO moves(media_id,src,dst,extras,batch) VALUES(?,?,?,?,?)",
                             (r["id"], r["path"], dst, json.dumps(extras), batch))
                 con.execute("UPDATE pins SET path=? WHERE path=?", (dst, r["path"]))
+                con.execute("UPDATE trash SET keeper_path=? WHERE keeper_path=?", (dst, r["path"]))
             moved += 1
         except Exception:
             traceback.print_exc()
