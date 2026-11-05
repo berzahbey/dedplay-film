@@ -1,4 +1,5 @@
 import os
+import traceback
 import time
 import threading
 import subprocess
@@ -527,6 +528,17 @@ def library_trash(req: IdsReq):
             traceback.print_exc()
     threading.Thread(target=go, daemon=True).start()
     return {"queued": len(ids), "waiting": bool(cleaner.state["running"])}
+
+
+class MoveReq(BaseModel):
+    ids: list[int]
+    to: str   # "belge" | "normal"
+
+
+@app.post("/api/library/move")
+def library_move(req: MoveReq):
+    """Seçilenleri Belgeler'e ayır ya da normal fotoğraf/videolara geri al."""
+    return {"queued": organize.reclassify(req.ids, "belge" if req.to == "belge" else None)}
 
 
 @app.get("/api/library/years")

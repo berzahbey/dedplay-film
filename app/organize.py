@@ -30,6 +30,7 @@ DEFAULTS = {
     "videos_dir": "video",
     "inbox": "Arsiv/Gelen",
     "other_dir": "Arsiv/Ekran ve Kaydedilenler",
+    "docs_dir": "Arsiv/Belgeler",
     "protected": ["video/kenan dugun", "video/Necla video", "Photos/muzaffer resim"],
     "include_bursts": True,
     "include_similar": True,
@@ -91,7 +92,7 @@ def is_protected(path, prot=None):
 def candidate_folders():
     """Arayüzde 'olduğu gibi kalsın' seçimi için: arşivdeki birinci/ikinci seviye klasörler."""
     s = settings()
-    skip = {s["photos_dir"], s["videos_dir"], s["inbox"], s["other_dir"]}
+    skip = {s["photos_dir"], s["videos_dir"], s["inbox"], s["other_dir"], s["docs_dir"]}
     out = []
     with db.db() as con:
         rows = con.execute("SELECT folder, COUNT(*) n FROM media GROUP BY folder").fetchall()
@@ -115,7 +116,9 @@ def candidate_folders():
 
 def target_for(r, s):
     base = s["photos_dir"] if r["kind"] == "photo" else s["videos_dir"]
-    if r.get("src"):  # ekran görüntüsü / kaydı ya da başka yerden kaydedilmiş
+    if r.get("src") == "belge":   # belge, evrak, duvar/tamir fotoğrafı (elle ayrılan)
+        base = s["docs_dir"]
+    elif r.get("src"):  # ekran görüntüsü / kaydı ya da başka yerden kaydedilmiş
         base = os.path.join(s["other_dir"], "Resimler" if r["kind"] == "photo" else "Videolar")
     if r["date_source"] in ("exif", "google", "filename") and r["taken_at"]:
         year = r["taken_at"][:4]
@@ -267,7 +270,8 @@ def _place_live(lives, s, prot, batch):
 
 def _remove_empty_dirs(prot, s):
     """Taşımadan sonra boş kalan eski klasörleri kaldırır (korunanlar, kökler ve Gelen hariç)."""
-    cur = {abs_dir(s["inbox"]), abs_dir(s["photos_dir"]), abs_dir(s["videos_dir"]), abs_dir(s["other_dir"])}
+    cur = {abs_dir(s["inbox"]), abs_dir(s["photos_dir"]), abs_dir(s["videos_dir"]), abs_dir(s["other_dir"]),
+           abs_dir(s["docs_dir"])}
     old = {abs_dir(v) for vs in OLD_LAYOUT.values() for v in vs} - cur      # eski düzenin klasörleri boşalınca kaldırılır
     keep = ({d.rstrip("/") for d in MEDIA_DIRS} - old) | cur
     junk = {".DS_Store", "Thumbs.db", "desktop.ini"}
@@ -284,6 +288,32 @@ def _remove_empty_dirs(prot, s):
                     os.rmdir(d)
             except OSError:
                 pass
+
+
+def reclassify(ids, src):
+    """Galeriden seçilenleri belge / normal fotoğraf olarak işaretle ve hemen yerine taşı (arka planda)."""
+    ids = list(ids)
+    with db.db() as con:
+        con.executemany("UPDATE media SET src=?, src_manual=1 WHERE id=?", [(src, i) for i in ids])
+
+    def go():
+        while True:
+            with _lock:
+                if not state["running"] and not scanner.state["running"]:
+                    state.update(running=True, phase="Seçilenler yerine taşınıyor", done=0, todo=0, error=None,
+                                 kind="run")
+                    break
+            time.sleep(5)
+        try:
+            organize_files(datetime.now().strftime("%Y-%m-%d %H.%M") + (" Belgelere" if src else " Fotoğraflara"))
+            state["phase"] = "Tamamlandı"
+        except Exception as e:
+            traceback.print_exc()
+            state.update(error=str(e), phase="Hata")
+        finally:
+            state.update(running=False, finished=time.time())
+    threading.Thread(target=go, daemon=True).start()
+    return len(ids)
 
 
 def migrate_layout():

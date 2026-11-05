@@ -80,7 +80,7 @@ button.ghost.red{color:var(--bad);border-color:#5a2226}
     <button data-t="clean" class="on">🧹 Temizle &amp; Düzenle</button>
     <button data-t="photos">🖼 Tüm resimler</button>
     <button data-t="videos">🎬 Tüm videolar</button>
-    <button data-t="other">📱 Ekran &amp; kaydedilenler</button>
+    <button data-t="other">📱 Ekran, belge &amp; kaydedilen</button>
     <button data-t="people">👤 Kişiler</button>
     <button data-t="trash">🗑 Çöp kutusu <span id="trashN"></span></button>
     <button data-t="settings">⚙ Ayarlar</button>
@@ -133,13 +133,14 @@ button.ghost.red{color:var(--bad);border-color:#5a2226}
       <div class="row">
         <span class="muted" id="libInfo"></span>
         <span style="flex:1"></span>
-        <button class="ghost" id="libSelMode">☑ Seçerek çöpe at</button>
+        <button class="ghost" id="libSelMode">☑ Seç (çöpe at / belgelere taşı)</button>
       </div>
       <div class="row hide" id="libSelBar" style="margin-top:8px">
         <button class="ghost" id="libAll">Yüklenenlerin hepsini seç</button>
         <button class="ghost" id="libNone">Seçimi kaldır</button>
         <span class="muted" id="libSelN">0 seçili</span>
         <span style="flex:1"></span>
+        <button class="ghost" id="libMove" disabled>📄 Belgelere taşı</button>
         <button class="btn red" id="libTrash" disabled>Seçilenleri çöp kutusuna at</button>
       </div>
     </div>
@@ -368,9 +369,17 @@ $('#libSections').onclick=e=>{const t=e.target.closest('.th');if(!t)return;
   const grid=t.parentElement,ids=[...grid.children].map(x=>+x.dataset.i),items=ids.map(i=>lib.items[i]);
   lightbox(items,ids.indexOf(+t.dataset.i),i=>'/api/media/'+i.id,lib.kind)};
 function libSel(){$('#libSelN').textContent=`${fmt(lib.sel.size)} seçili`;$('#libTrash').disabled=!lib.sel.size;
+  $('#libMove').disabled=!lib.sel.size;$('#libMove').textContent=lib.kind=='other'?'↩ Fotoğraf/videolara taşı':'📄 Belgelere taşı';
   document.querySelectorAll('#libSections .th').forEach(t=>t.classList.toggle('sel',lib.sel.has(+t.dataset.id)))}
 $('#libSelMode').onclick=()=>{lib.selMode=!lib.selMode;$('#libSelBar').classList.toggle('hide',!lib.selMode);
-  $('#libSelMode').textContent=lib.selMode?'✕ Seçimi bitir':'☑ Seçerek çöpe at';if(!lib.selMode){lib.sel.clear();libSel()}};
+  $('#libSelMode').textContent=lib.selMode?'✕ Seçimi bitir':'☑ Seç (çöpe at / belgelere taşı)';if(!lib.selMode){lib.sel.clear();libSel()}};
+$('#libMove').onclick=async()=>{const ids=[...lib.sel];if(!ids.length)return;
+  const to=lib.kind=='other'?'normal':'belge';
+  await post('/api/library/move',{ids,to});
+  ids.forEach(id=>document.querySelectorAll(`#libSections .th[data-id="${id}"]`).forEach(t=>t.remove()));
+  lib.sel.clear();libSel();
+  alert(to=='belge'?`${fmt(ids.length)} dosya Arsiv/Belgeler klasörüne taşınıyor. "Ekran, belge & kaydedilen" sekmesinde görünür.`:`${fmt(ids.length)} dosya Photos/video klasörlerine taşınıyor.`);
+  setTimeout(status,3000)};
 $('#libAll').onclick=()=>{lib.items.forEach(i=>lib.sel.add(i.id));libSel()};
 $('#libNone').onclick=()=>{lib.sel.clear();libSel()};
 $('#libTrash').onclick=async()=>{if(!confirm(`${fmt(lib.sel.size)} dosya çöp kutusuna taşınsın mı? (Çöp kutusundan geri alabilirsin)`))return;

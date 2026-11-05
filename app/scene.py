@@ -22,7 +22,10 @@ MAX_GROUP = 12
 MIN_INLIERS = 35
 MIN_AREA = 0.18      # tutarlı noktalar resmin en az %18'ine yayılmalı (köşedeki tarih damgası yetmez)
 MIN_OVERLAP = 0.70   # hizalanınca iki kare en az %70 örtüşmeli
-MAX_DIFF = 0.45      # hizalanmış karelerde farklı piksel oranı en fazla %45 (kişiler/düzen değişmişse büyür)
+MAX_DIFF = 0.45
+# Gevşek benzerlik: kamera kaymış / açı değişmiş ama aynı an. Sadece aynı kişiler (yüz tanıma) varsa kabul edilir.
+LOOSE_WINDOW = 60      # sn
+LOOSE_HIST = 0.75      # renk dağılımı benzerliği (aynı mekân/ışık)      # hizalanmış karelerde farklı piksel oranı en fazla %45 (kişiler/düzen değişmişse büyür)
 ANALYSIS_W = 640
 MAX_NEIGHBORS = 12
 
@@ -95,7 +98,7 @@ def _t(r):
     return datetime.fromisoformat(r["taken_at"]).timestamp()
 
 
-def find_groups(photos, progress=None):
+def find_groups(photos, progress=None, loose_ok=None):
     """photos: güvenilir tarihli fotoğraflar. Dönüş: [[id, id, ...], ...] benzer kare grupları."""
     rows = sorted((r for r in photos if r["date_source"] in ("exif", "google") and r["taken_at"]), key=_t)
     ts = [_t(r) for r in rows]
@@ -134,9 +137,21 @@ def find_groups(photos, progress=None):
                 if progress:
                     progress(done, len(todo))
 
-    def same(a, b):
+    def strict(a, b):
         n, area, ov, diff = known.get((a, b)) or known.get((b, a)) or (0, 0.0, 0.0, 1.0)
         return n >= MIN_INLIERS and area >= MIN_AREA and ov >= MIN_OVERLAP and diff <= MAX_DIFF
+
+    # gevşek adaylar: yakın zamanda, sahnesi kısmen tutan ama sıkı kuralı geçemeyen çiftler
+    accepted = set()
+    if loose_ok:
+        cand = [(rows[i]["id"], rows[j]["id"]) for i in range(len(rows))
+                for j in range(i + 1, min(len(rows), i + 1 + MAX_NEIGHBORS))
+                if ts[j] - ts[i] <= LOOSE_WINDOW and not strict(rows[i]["id"], rows[j]["id"])]
+        if cand:
+            accepted = {tuple(sorted(p)) for p in loose_ok(cand)}
+
+    def same(a, b):
+        return strict(a, b) or tuple(sorted((a, b))) in accepted
 
     # 2) temkinli gruplama: yeni kare hem grubun ilk karesine hem bir önceki kareye benzemeli
     groups, open_g = [], []
@@ -162,3 +177,18 @@ def find_groups(photos, progress=None):
         open_g = still
     groups += [[x for x, _ in g] for g in open_g if len(g) > 1]
     return groups
+
+
+def color_hist(path):
+    import cv2
+    import numpy as np
+    from .analyze import load_image
+    a = cv2.cvtColor(np.asarray(load_image(path, 320)), cv2.COLOR_RGB2HSV)
+    a = cv2.resize(a, (160, 160))
+    h = cv2.calcHist([a], [0, 1, 2], None, [12, 6, 6], [0, 180, 0, 256, 0, 256])
+    return cv2.normalize(h, h).flatten()
+
+
+def hist_sim(ha, hb):
+    import cv2
+    return float(cv2.compareHist(ha, hb, cv2.HISTCMP_CORREL))

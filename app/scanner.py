@@ -173,7 +173,7 @@ def _source_pass():
     with db.db() as con:
         old = [dict(r) for r in con.execute(
             "SELECT id,path,kind,width,height,lat,make,model,software,ucomment FROM media "
-            "WHERE src_checked IS NOT NULL AND src_checked < ?", (VERSION,))]
+            "WHERE src_checked IS NOT NULL AND src_checked < ? AND src_manual IS NULL", (VERSION,))]
         con.executemany("UPDATE media SET src=?, src_checked=? WHERE id=?",
                         [(classify(r), VERSION, r["id"]) for r in old])
         con.execute("UPDATE media SET src=NULL WHERE live_of IS NOT NULL")

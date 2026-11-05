@@ -205,9 +205,40 @@ def _find(include_bursts, keep_running=False, include_similar=True):
             _set(phase="Benzer kareler aranıyor (yapay görü: aynı sahne, farklı poz)", todo=0, done=0)
             from .scene import find_groups
             photos = [r for r in rows if r["kind"] == "photo"]
-            scene_groups = find_groups(photos, lambda d, t: state.update(done=d, todo=t))
-            # Yüz tanıma: aynı sahne ama kişiler farklıysa ayrı anlardır (baba+çocuk ≠ dede+çocuk)
             from . import faces as F
+
+            def loose_ok(pairs):
+                """Açı değişmiş kareler: ikisinde de yüz bulunup kişiler birebir aynıysa aynı an."""
+                ids = sorted({x for p in pairs for x in p})
+                with db.db() as con:
+                    pend = [(r["id"], r["path"]) for r in con.execute(
+                        f"SELECT id, path FROM media WHERE (faces_done IS NULL OR faces_done=-1) "
+                        f"AND id IN ({','.join('?' * len(ids))})", ids)]
+                if pend:
+                    F._load()
+                    _set(phase="Benzer karelerde kişiler tanınıyor (yüz tanıma)", todo=len(pend), done=0)
+                    F.analyze(pend, lambda d, t: state.update(done=d, todo=t))
+                fm = F.faces_of(ids)
+                pairs = [(a, b) for a, b in pairs
+                         if fm[a] and fm[b] and len(fm[a]) == len(fm[b]) and F.same_people(fm[a], fm[b]) is True]
+                if not pairs:
+                    return []
+                from .scene import color_hist, hist_sim
+                with db.db() as con:
+                    pp = {r["id"]: r["path"] for r in con.execute(
+                        f"SELECT id, path FROM media WHERE id IN ({','.join('?' * len(ids))})", ids)}
+                hs = {}
+                for i in {x for p in pairs for x in p}:
+                    try:
+                        hs[i] = color_hist(pp[i])
+                    except Exception:
+                        pass
+                from .scene import LOOSE_HIST
+                return [(a, b) for a, b in pairs if a in hs and b in hs and hist_sim(hs[a], hs[b]) >= LOOSE_HIST]
+
+            scene_groups = find_groups(photos, lambda d, t: state.update(done=d, todo=t), loose_ok=loose_ok)
+            _set(phase="Benzer kareler gruplanıyor", todo=0, done=0)
+            # Yüz tanıma: aynı sahne ama kişiler farklıysa ayrı anlardır (baba+çocuk ≠ dede+çocuk)
             need = [m for g in scene_groups for m in g]
             with db.db() as con:
                 pend = [(r["id"], r["path"]) for r in con.execute(

@@ -4,7 +4,7 @@ Ev sunucusundaki (ZimaOS) fotoğraf ve video arşivini tarar, kopyaları ayıkla
 
 ## Ne yapar?
 
-- **Kopyalar:** Birebir aynı dosyalar; adı, boyutu ya da sıkıştırması farklı ama görüntüsü aynı olanlar (WhatsApp, Google Fotoğraflar kopyaları, yeniden kaydedilmiş videolar); seri çekimler; aynı sahne ve aynı kişilerle çekilmiş benzer kareler. Her grupta **en iyisi** kalır (gerçek çekim tarihi, yüksek çözünürlük, netlik, açık gözler, gülümseme). Diğerleri **çöp kutusuna** gider; hiçbir şey kendiliğinden kalıcı silinmez.
+- **Kopyalar:** Birebir aynı dosyalar; adı, boyutu ya da sıkıştırması farklı ama görüntüsü aynı olanlar (WhatsApp, Google Fotoğraflar kopyaları, yeniden kaydedilmiş videolar); seri çekimler; aynı sahne ve aynı kişilerle çekilmiş benzer kareler; kamera kaymış olsa bile bir dakika içinde aynı kişilerle çekilmiş kareler. Her grupta **en iyisi** kalır (gerçek çekim tarihi, yüksek çözünürlük, netlik, açık gözler, gülümseme). Diğerleri **çöp kutusuna** gider; hiçbir şey kendiliğinden kalıcı silinmez.
 - **Düzen:**
   ```
   /DATA/Media/
@@ -13,6 +13,7 @@ Ev sunucusundaki (ZimaOS) fotoğraf ve video arşivini tarar, kopyaları ayıkla
   └─ Arsiv/
      ├─ Gelen/                           yeni dosyalar (otomatik işlenir)
      ├─ Ekran ve Kaydedilenler/Resimler|Videolar/<yıl>
+     ├─ Belgeler/<yıl>/                  evrak, belge, tamir fotoğrafları (galeriden "📄 Belgelere taşı")
      └─ Dedplay Cop Kutusu/              çöp kutusu (taranmaz)
   ```
   Çekim tarihi bilinmeyenler `Tarihsiz` klasörüne gider. Canlı fotoğrafların (Live Photo) videoları fotoğrafın yanında kalır.
