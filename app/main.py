@@ -389,6 +389,22 @@ def set_settings(req: SettingsReq):
     return organize.save_settings(**{k: v for k, v in req.model_dump().items() if v is not None})
 
 
+@app.get("/api/feeds")
+def feeds_list():
+    return {"feeds": organize.feed_candidates(), "dir": "/DATA/Backup"}
+
+
+class FeedReq(BaseModel):
+    name: str
+    on: bool
+
+
+@app.post("/api/feeds")
+def feeds_set(req: FeedReq):
+    organize.set_feed(req.name, req.on)
+    return {"feeds": organize.feed_candidates()}
+
+
 @app.post("/api/pins/clear")
 def pins_clear():
     """Çöpten geri alınanların 'dokunma' kilidini kaldırır: bir sonraki taramada yeniden değerlendirilirler."""

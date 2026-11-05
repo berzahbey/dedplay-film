@@ -22,7 +22,7 @@ import traceback
 from datetime import datetime
 
 from . import cleaner, db, scanner
-from .config import DATA_DIR, INBOX_FEEDS, MEDIA_DIRS, TRASH_DIR
+from .config import BACKUP_DIR, DATA_DIR, INBOX_FEEDS, MEDIA_DIRS, TRASH_DIR
 
 SETTINGS_FILE = os.path.join(DATA_DIR, "ayarlar.json")
 DEFAULTS = {
@@ -35,6 +35,8 @@ DEFAULTS = {
     "include_similar": True,
     "short_mode": "keep",    # fotoğrafı bulunmayan 3 sn'den kısa videolar: keep | trash
     "live_mode": "keep",     # canlı fotoğraf videoları: keep = fotoğrafın yanında, trash = çöpe
+    "feeds_on": [],         # telefon adı gibi görünmeyen ama Gelen'e alınacak yedek klasörleri
+    "feeds_off": [],        # telefon gibi görünen ama alınmayacak yedek klasörleri
     "auto": False,          # ilk büyük temizlikten sonra açılır
     "last_full": None,
 }
@@ -495,17 +497,60 @@ def _inbox_ready(path, quiet=120):
     return found
 
 
+import re as _re
+PHONE_RE = _re.compile(r"iphone|ipad|android|galaxy|pixel|redmi|xiaomi|huawei|honor|oneplus|oppo|vivo|realme|"
+                       r"motorola|nokia|sony|xperia|samsung|\bsm-|phone|telefon", _re.I)
+
+
+def feed_candidates():
+    """/DATA/Backup altındaki klasörler: telefon yedeği gibi görünenler kendiliğinden açık."""
+    s = settings()
+    env = {os.path.basename(p.rstrip("/")) for p in INBOX_FEEDS}
+    out = []
+    try:
+        names = sorted(n for n in os.listdir(BACKUP_DIR)
+                       if not n.startswith((".", "$")) and os.path.isdir(os.path.join(BACKUP_DIR, n)))
+    except OSError:
+        names = []
+    for n in names:
+        phone = bool(PHONE_RE.search(n)) or n in env
+        on = (phone or n in s["feeds_on"]) and n not in s["feeds_off"]
+        cnt = 0
+        for d, _, files in os.walk(os.path.join(BACKUP_DIR, n)):
+            cnt += sum(1 for f in files if not f.startswith(".") and scanner._kind(f))
+            if cnt > 9999:
+                break
+        out.append({"name": n, "path": os.path.join(BACKUP_DIR, n), "phone": phone, "on": on, "count": cnt})
+    return out
+
+
+def feed_dirs():
+    dirs = [c["path"] for c in feed_candidates() if c["on"]]
+    return dirs + [p for p in INBOX_FEEDS if os.path.dirname(p.rstrip("/")) != BACKUP_DIR.rstrip("/")]
+
+
+def set_feed(name, on):
+    s = settings()
+    fon, foff = [x for x in s["feeds_on"] if x != name], [x for x in s["feeds_off"] if x != name]
+    if on:
+        fon.append(name)
+    else:
+        foff.append(name)
+    save_settings(feeds_on=fon, feeds_off=foff)
+
+
 _TMP_EXT = (".tmp", ".part", ".partial", ".download", ".crdownload", ".uploading")
 
 
 def feed_pass(quiet=90):
     """Besleyen klasörlerdeki (ör. /DATA/Backup/iPhone 14 Plus) yüklenmesi bitmiş dosyaları
     Gelen/<klasör adı>/ altına taşır; gerisini Gelen akışı yapar (kopya → çöp, yeni → Photos/video)."""
-    if not INBOX_FEEDS:
+    feeds = feed_dirs()
+    if not feeds:
         return 0
     inbox = abs_dir(settings()["inbox"])
     now, n = time.time(), 0
-    for feed in INBOX_FEEDS:
+    for feed in feeds:
         if not os.path.isdir(feed):
             continue
         dest_root = os.path.join(inbox, os.path.basename(feed.rstrip("/")))

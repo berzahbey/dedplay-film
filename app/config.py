@@ -12,6 +12,7 @@ DATA_DIR = os.environ.get("DATA_DIR", "/app/data")
 # Çöp kutusu: arşivle AYNI bağlama noktası altında olmalı (taşıma anında olsun, kopyalama değil)
 TRASH_DIR = os.environ.get("TRASH_DIR", "")
 # Gelen kutusunu besleyen klasörler (ör. ZimaOS iPhone yedeği): bitmiş dosyalar Gelen'e taşınır
+BACKUP_DIR = os.environ.get("BACKUP_DIR", "/backup")   # ZimaOS istemci yedekleri (telefon klasörleri kendiliğinden bulunur)
 INBOX_FEEDS = [p.strip() for p in os.environ.get("INBOX_FEEDS", "").split(",") if p.strip()]
 # Eski sürümün yolları → yeni yollar (veritabanı yeniden taramaya gerek kalmadan güncellenir)
 PATH_MIGRATE = [tuple(x.split("=", 1)) for x in os.environ.get("PATH_MIGRATE", "").split(",") if "=" in x]

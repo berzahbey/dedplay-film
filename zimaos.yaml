@@ -1,18 +1,16 @@
 # Dedplay Arşiv — ZimaOS "Install a customized app → Import" için
 # Hazır imaj kullanır (GitHub Actions ile derlenir). Klasörleri kendine göre değiştir.
-name: dedplay-film
+name: dedplay-arsiv
 services:
-  dedplay-film:
+  dedplay-arsiv:
     image: ghcr.io/berzahbey/dedplay-film:latest
-    container_name: dedplay-film
+    container_name: dedplay-arsiv
     ports:
       - "8090:8000"
     environment:
       - TZ=Europe/Amsterdam
       - MEDIA_DIRS=/archive/Photos,/archive/video,/archive/Arsiv
       - TRASH_DIR=/archive/Arsiv/Dedplay Cop Kutusu
-      # ZimaOS iPhone yedeği (telefonunun adıyla değiştir; kullanmıyorsan bu satırı sil)
-      - INBOX_FEEDS=/backup/iPhone 14 Plus
       - MUSIC_DIR=/archive/Music/music
       - OUTPUT_DIR=/archive/Movies/Dedplay Film
     volumes:
@@ -28,9 +26,6 @@ services:
     restart: unless-stopped
     x-casaos:
       envs:
-        - container: INBOX_FEEDS
-          description:
-            en_us: ZimaOS iPhone backup folder(s) to import, comma separated
         - container: MEDIA_DIRS
           description:
             en_us: Archive folders to scan
@@ -44,22 +39,25 @@ services:
             en_us: Photo/video archive (Photos, video, Arsiv)
         - container: /backup
           description:
-            en_us: ZimaOS client backups
+            en_us: ZimaOS client backups (phone folders are detected automatically)
         - container: /app/data
           description:
             en_us: Database, settings, thumbnails
 x-casaos:
   architectures:
     - amd64
-  main: dedplay-film
+  main: dedplay-arsiv
   author: berzahbey
   category: Media
   description:
     en_us: Cleans duplicate photos/videos, organizes the archive by year, imports iPhone backups, face recognition.
   tagline:
     en_us: Photo & video archive cleaner
+    tr_tr: Fotoğraf ve video arşivi temizleyici
   title:
     en_us: Dedplay Arşiv
+    tr_tr: Dedplay Arşiv
+    custom: Dedplay Arşiv
   icon: https://raw.githubusercontent.com/berzahbey/dedplay-film/main/icon.png
   index: /
   port_map: "8090"

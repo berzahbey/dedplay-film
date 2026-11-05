@@ -222,6 +222,11 @@ button.ghost.red{color:var(--bad);border-color:#5a2226}
     <label class="row"><input type="radio" name="short" value="trash"> Çöp kutusuna atılsın</label>
   </div>
   <div class="card">
+    <h2>Telefon yedekleri (ZimaOS)</h2>
+    <div class="muted" style="margin-bottom:8px">ZimaOS istemcisinin <b>/DATA/Backup</b> altına açtığı telefon klasörleri kendiliğinden bulunur. İşaretli klasörlere gelen fotoğraf ve videolar yüklemesi bitince Gelen'e alınır ve işlenir (klasör boşalır). Yeni bir telefon eklediğinde bir şey yapman gerekmez.</div>
+    <div class="flist" id="feeds"></div>
+  </div>
+  <div class="card">
     <h2>Otomatik düzen</h2>
     <label class="row"><input type="checkbox" id="auto"> Gelen klasörünü sürekli işle (5 dakikada bir) ve 6 saatte bir tüm arşive bak</label>
     <div class="muted" id="autoInfo" style="margin-top:8px"></div>
@@ -476,12 +481,16 @@ $('#tDeleteAll').onclick=async()=>{const what=T.batch?`"${T.batch}" turundaki`:'
 async function loadSettings(){const r=await api('/api/settings');
   $('#folders').innerHTML=r.folders.length?r.folders.map(f=>`<label><input type="checkbox" value="${f.path}" ${f.protected?'checked':''}><span style="flex:1">${f.path}</span><span class="muted">${fmt(f.count)} dosya</span></label>`).join(''):'<div class="muted">Önce arşivi tara.</div>';
   $('#auto').checked=r.settings.auto;
+  loadFeeds();
   document.querySelectorAll('input[name=live]').forEach(i=>{i.checked=i.value==r.settings.live_mode;i.onchange=()=>post('/api/settings',{live_mode:i.value})});
   document.querySelectorAll('input[name=short]').forEach(i=>{i.checked=i.value==(r.settings.short_mode||'keep');i.onchange=()=>post('/api/settings',{short_mode:i.value})});
   if(ST)$('#liveInfo').textContent=`Şu an ${fmt(ST.live)} canlı fotoğraf videosu fotoğrafına bağlı. Fotoğrafı bulunamayan 4 sn'den kısa video: ${fmt(ST.short)}. Ayar değişikliği bir sonraki "Onayla" ya da otomatik turda uygulanır.`;
   $('#autoInfo').textContent=`Yeni dosyaları ${r.settings.inbox} klasörüne (/DATA/Media/${r.settings.inbox}) at. Kopyaysa çöpe, değilse ${r.settings.photos_dir}/<yıl> veya ${r.settings.videos_dir}/<yıl> klasörüne taşınır. İlk büyük temizlikten sonra kendiliğinden açılır.`}
 $('#saveProt').onclick=async()=>{const p=[...document.querySelectorAll('#folders input:checked')].map(i=>i.value);
   await post('/api/settings',{protected:p});$('#saveInfo').textContent='Kaydedildi. Sonraki "Kopyaları bul" bu ayarla çalışır.';status()};
+async function loadFeeds(){const r=await api('/api/feeds');
+  $('#feeds').innerHTML=r.feeds.length?r.feeds.map(f=>`<label><input type="checkbox" data-feed="${f.name}" ${f.on?'checked':''}><span style="flex:1">${f.name}${f.phone?'':' <span class="muted">(telefon değil gibi)</span>'}</span><span class="muted">${f.on?(f.count?fmt(f.count)+' dosya bekliyor':'boş'):''}</span></label>`).join(''):'<div class="muted">/DATA/Backup altında klasör yok.</div>'}
+$('#feeds').onchange=async e=>{const i=e.target.closest('[data-feed]');if(!i)return;await post('/api/feeds',{name:i.dataset.feed,on:i.checked});loadFeeds()};
 $('#auto').onchange=async e=>{await post('/api/settings',{auto:e.target.checked});status()};
 
 

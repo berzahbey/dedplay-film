@@ -1,8 +1,10 @@
+# ZimaOS'a kurmak için bu dosyayı DEĞİL, zimaos.yaml'ı kullan. Bu dosya terminalden kaynak koddan derlemek içindir.
+name: dedplay-arsiv
 services:
-  dedplay-film:
+  dedplay-arsiv:
     build: .
-    image: berzahbey/dedplay-film:latest
-    container_name: dedplay-film
+    image: ghcr.io/berzahbey/dedplay-film:latest
+    container_name: dedplay-arsiv
     ports:
       - "8090:8000"
     environment:
@@ -10,8 +12,6 @@ services:
       # Tüm Media klasörü TEK bağlama noktası: taşımalar (çöp kutusu, düzenleme) anında olur
       - MEDIA_DIRS=/archive/Photos,/archive/video,/archive/Arsiv,/archive/Arşiv,/archive/Resimler,/archive/Videolar,/archive/Ekran ve Kaydedilenler,/archive/Gelen
       - TRASH_DIR=/archive/Arsiv/Dedplay Cop Kutusu
-      # ZimaOS iPhone yedeği: yüklenmesi biten dosyalar Arsiv/Gelen'e taşınır ve işlenir
-      - INBOX_FEEDS=/backup/iPhone 14 Plus
       # Eski sürümün kayıtlı yolları (yeniden tarama gerekmesin)
       - PATH_MIGRATE=/media/photos=/archive/Photos,/media/videos=/archive/video
       # Film (deneysel) bölümü için
@@ -22,7 +22,7 @@ services:
       # Yazma izinli: kopyalar çöp kutusuna taşınır, kalanlar Photos/video klasörlerine yerleşir.
       # Kalıcı silme sadece arayüzdeki "kalıcı sil" ile olur.
       - /DATA/Media:/archive
-      # ZimaOS client yedekleri (yalnızca INBOX_FEEDS'teki klasörlere dokunulur)
+      # ZimaOS client yedekleri: telefon klasörleri kendiliğinden bulunur (Ayarlar → Telefon yedekleri)
       - /DATA/Backup:/backup
       # Veritabanı, küçük resimler, ayarlar
       - /DATA/AppData/dedplay-film:/app/data

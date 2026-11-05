@@ -18,7 +18,7 @@ Ev sunucusundaki (ZimaOS) fotoğraf ve video arşivini tarar, kopyaları ayıkla
   Çekim tarihi bilinmeyenler `Tarihsiz` klasörüne gider. Canlı fotoğrafların (Live Photo) videoları fotoğrafın yanında kalır.
 - **Korunan klasörler** (Ayarlar'dan seçilir) olduğu gibi kalır: içlerindeki dosyalar taşınmaz, çöpe atılmaz.
 - **Gelen kutusu:** `Arsiv/Gelen` 5 dakikada bir işlenir: arşivde zaten varsa çöpe ("zaten arşivde"), daha kalitelisiyse arşivdekinin yerine geçer, yeniyse yerine yerleşir. 6 saatte bir tüm arşiv de kontrol edilir.
-- **iPhone yedeği:** ZimaOS istemcisinin yedeklediği klasör (ör. `/DATA/Backup/iPhone 14 Plus`) her dakika kontrol edilir; yüklemesi biten dosyalar Gelen'e alınıp işlenir.
+- **Telefon yedekleri:** ZimaOS istemcisinin `/DATA/Backup` altına açtığı telefon klasörleri (iPhone, Galaxy, Pixel…) kendiliğinden bulunur ve her dakika kontrol edilir; yüklemesi biten dosyalar Gelen'e alınıp işlenir. Yeni telefon eklemek için bir şey yapmana gerek yok; hangi klasörlerin alınacağı **⚙ Ayarlar → Telefon yedekleri**'nden açılıp kapatılır. Masaüstü yedeği gibi telefon olmayan klasörlere dokunulmaz.
 - **Kişiler:** Yüzler bulunur ve kişilere ayrılır. İsim ver, aynı kişinin kartlarını birleştir (aynı ismi vermek de birleştirir), yanlış fotoğrafları "Bu kişi olmayanları seç" ile çıkar.
 - **Çöp kutusu:** Her tur kendi klasöründe ("2026-11-05 14.30 Gelen"). Tek tek, seçerek ya da hepsini geri al / kalıcı sil.
 - **Geri alma:** Her düzenleme turu kaydedilir; "Son düzenlemeler"den dosyalar eski yerlerine döndürülebilir.
@@ -39,7 +39,7 @@ Ev sunucusundaki (ZimaOS) fotoğraf ve video arşivini tarar, kopyaları ayıkla
 
 > İmaj GitHub'da her push'ta otomatik derlenir: `ghcr.io/berzahbey/dedplay-film:latest` (Actions sekmesinden izlenir).
 > İlk derlemeden sonra GitHub'da bir kez **Profil → Packages → dedplay-film → Package settings → Change visibility → Public**
-> yap; yoksa ZimaOS imajı indiremez. Güncellemek için: `docker compose pull && docker compose up -d` ya da ZimaOS'ta uygulamayı yeniden kur.
+> yap; yoksa ZimaOS imajı indiremez. Güncellemek için: `docker pull ghcr.io/berzahbey/dedplay-film:latest && docker restart dedplay-arsiv` ya da ZimaOS'ta uygulamayı yeniden kur.
 
 ### B) Terminalden, kaynak koddan
 
@@ -67,12 +67,12 @@ cd /DATA/AppData/dedplay-film-src && git pull && docker compose up -d --build
 | Arşiv (fotoğraf/video ana klasörü) | `volumes: - /DATA/Media:/archive` | `/DATA/Media` |
 | Taranan klasörler | `MEDIA_DIRS` | `Photos, video, Arsiv` |
 | Çöp kutusu | `TRASH_DIR` | `/archive/Arsiv/Dedplay Cop Kutusu` |
-| iPhone yedek klasörü | `volumes: - /DATA/Backup:/backup` ve `INBOX_FEEDS` | `/backup/iPhone 14 Plus` |
+| Telefon yedekleri | `volumes: - /DATA/Backup:/backup` | kendiliğinden bulunur |
 | Veritabanı, ayarlar, küçük resimler | `volumes: - /DATA/AppData/dedplay-film:/app/data` | |
 | Port | `ports: - "8090:8000"` | `8090` |
 
-- Telefonunun adı farklıysa `INBOX_FEEDS` içindeki `iPhone 14 Plus` kısmını `/DATA/Backup` altındaki klasör adıyla değiştir. Birden fazla telefon için virgülle ayır: `INBOX_FEEDS=/backup/iPhone 14 Plus,/backup/iPhone 13`.
-- iPhone yedeği kullanmıyorsan `INBOX_FEEDS` satırını ve `/DATA/Backup` bağlantısını silebilirsin.
+- Telefon klasörleri adından tanınır (iPhone, iPad, Galaxy, Pixel, Xiaomi, "telefon"…). Adı farklı bir klasörü **⚙ Ayarlar → Telefon yedekleri**'nden işaretleyerek ekleyebilirsin.
+- Telefon yedeği kullanmıyorsan `/DATA/Backup` bağlantısını silebilirsin.
 - Korunacak klasörler, canlı fotoğraf ve kısa video davranışı, otomatik düzen: uygulamada **⚙ Ayarlar**.
 - Klasör adlarında Türkçe karakter kullanma (ş, ç, ö…): ZimaOS istemcisi bunları seçemeyebilir.
 
@@ -86,8 +86,8 @@ cd /DATA/AppData/dedplay-film-src && git pull && docker compose up -d --build
 ## Sorun giderme
 
 ```bash
-docker logs dedplay-film --tail 50                     # hata var mı
-docker logs dedplay-film 2>&1 | grep -i besleyen       # iPhone yedeğinden alınan dosyalar
+docker logs dedplay-arsiv --tail 50                     # hata var mı
+docker logs dedplay-arsiv 2>&1 | grep -i besleyen       # iPhone yedeğinden alınan dosyalar
 curl -s localhost:8090/api/clean/status | head -c 400  # şu anki iş
 ```
 
