@@ -4,7 +4,7 @@ Görsel iz (dhash) bunları yakalayamaz, çünkü kişi kıpırdamış, kamera b
 bilgisayarlı görü kullanılır: her fotoğrafta SIFT ayırt edici noktaları çıkarılır, iki fotoğrafın
 noktaları eşleştirilir ve geometrik olarak tutarlı (RANSAC) eşleşme sayısına bakılır. Aynı
 sahnenin iki karesi yüzlerce tutarlı eşleşme verir, farklı sahneler birkaç tane.
-(Örnek karelerle ölçüldü: aynı sahne 67–560, farklı sahne en fazla 11 tutarlı eşleşme; eşik 35.)
+
 
 Yanlış birleştirmeyi önlemek için: sadece 3 dakika içinde çekilenler karşılaştırılır, bir grup
 ilk karesinden 3 dakikadan uzağa uzamaz ve en fazla 12 kare olur; yeni kare hem grubun ilk
@@ -20,7 +20,9 @@ WINDOW = 180          # sn: karşılaştırma penceresi
 MAX_SPAN = 180        # sn: bir grubun ilk ve son karesi arası en fazla
 MAX_GROUP = 12
 MIN_INLIERS = 35
-MIN_RATIO = 0.05
+MIN_AREA = 0.18      # tutarlı noktalar resmin en az %18'ine yayılmalı (köşedeki tarih damgası yetmez)
+MIN_OVERLAP = 0.70   # hizalanınca iki kare en az %70 örtüşmeli
+MAX_DIFF = 0.45      # hizalanmış karelerde farklı piksel oranı en fazla %45 (kişiler/düzen değişmişse büyür)
 ANALYSIS_W = 640
 MAX_NEIGHBORS = 12
 
@@ -30,27 +32,42 @@ def _feat(path):
     from .analyze import load_image
     import numpy as np
     im = load_image(path, ANALYSIS_W)
-    g = np.asarray(im.convert("L"))
+    g = np.ascontiguousarray(np.asarray(im.convert("L")))
     sift = cv2.SIFT_create(nfeatures=1500)
     kp, des = sift.detectAndCompute(g, None)
     if des is None or len(kp) < 20:
         return None
-    return np.float32([k.pt for k in kp]), des
+    return np.float32([k.pt for k in kp]), des, g
 
 
 def _match(fa, fb):
+    """Dönüş: (tutarlı eşleşme, yayılma alanı, örtüşme, farklı piksel oranı)."""
     import cv2
     import numpy as np
-    (pa, da), (pb, dbb) = fa, fb
+    (pa, da, ga), (pb, dbb, gb) = fa, fb
     m = cv2.BFMatcher().knnMatch(da, dbb, k=2)
     good = [x for x, y in (p for p in m if len(p) == 2) if x.distance < 0.75 * y.distance]
     if len(good) < 12:
-        return 0, 0.0
+        return 0, 0.0, 0.0, 1.0
     a = np.float32([pa[x.queryIdx] for x in good])
     b = np.float32([pb[x.trainIdx] for x in good])
-    _, mask = cv2.findFundamentalMat(a, b, cv2.FM_RANSAC, 3.0, 0.99)
-    inl = int(mask.sum()) if mask is not None else 0
-    return inl, inl / max(1, min(len(pa), len(pb)))
+    H, mask = cv2.findHomography(b, a, cv2.RANSAC, 4.0)
+    if H is None:
+        return 0, 0.0, 0.0, 1.0
+    inl = mask.ravel().astype(bool)
+    n = int(inl.sum())
+    h, w = ga.shape
+    pts = a[inl]
+    area = float(cv2.contourArea(cv2.convexHull(pts))) / (w * h) if len(pts) >= 3 else 0.0
+    gb2 = cv2.resize(gb, (gb.shape[1], gb.shape[0]))
+    warped = cv2.warpPerspective(gb2, H, (w, h))
+    valid = cv2.warpPerspective(np.ones_like(gb2), H, (w, h)) > 0
+    overlap = float(valid.mean())
+    ea = cv2.GaussianBlur(ga, (0, 0), 3).astype(np.float32)
+    eb = cv2.GaussianBlur(warped, (0, 0), 3).astype(np.float32)
+    d = np.abs(ea - eb)[valid]
+    diff = float((d > 25).mean()) if d.size else 1.0
+    return n, round(area, 3), round(overlap, 3), round(diff, 3)
 
 
 def _chain_job(args):
@@ -65,13 +82,12 @@ def _chain_job(args):
                 except Exception:
                     feats[x] = None
         if feats[a] is None or feats[b] is None:
-            out.append((a, b, 0, 0.0))
+            out.append((a, b, 0, 0.0, 0.0, 1.0))
             continue
         try:
-            inl, r = _match(feats[a], feats[b])
+            out.append((a, b) + _match(feats[a], feats[b]))
         except Exception:
-            inl, r = 0, 0.0
-        out.append((a, b, inl, r))
+            out.append((a, b, 0, 0.0, 0.0, 1.0))
     return out
 
 
@@ -91,7 +107,7 @@ def find_groups(photos, progress=None):
                 break
             need.append((r["id"], rows[j]["id"]))
     with db.db() as con:
-        known = {(a, b): (n, q) for a, b, n, q in con.execute("SELECT a, b, inl, ratio FROM scene_pairs")}
+        known = {(a, b): v for a, b, *v in con.execute("SELECT a, b, inl, area, overlap, diff FROM scene_pairs2")}
     todo = [p for p in need if p not in known]
     if todo:
         paths = {r["id"]: r["path"] for r in rows}
@@ -110,16 +126,17 @@ def find_groups(photos, progress=None):
         with ProcessPoolExecutor(workers) as ex:
             for res in ex.map(_chain_job, jobs):
                 with db.db() as con:
-                    con.executemany("INSERT OR REPLACE INTO scene_pairs(a,b,inl,ratio) VALUES(?,?,?,?)", res)
-                for a, b, n, q in res:
-                    known[(a, b)] = (n, q)
+                    con.executemany("INSERT OR REPLACE INTO scene_pairs2(a,b,inl,area,overlap,diff) "
+                                    "VALUES(?,?,?,?,?,?)", res)
+                for a, b, *v in res:
+                    known[(a, b)] = v
                 done += len(res)
                 if progress:
                     progress(done, len(todo))
 
     def same(a, b):
-        n, q = known.get((a, b)) or known.get((b, a)) or (0, 0.0)
-        return n >= MIN_INLIERS and q >= MIN_RATIO
+        n, area, ov, diff = known.get((a, b)) or known.get((b, a)) or (0, 0.0, 0.0, 1.0)
+        return n >= MIN_INLIERS and area >= MIN_AREA and ov >= MIN_OVERLAP and diff <= MAX_DIFF
 
     # 2) temkinli gruplama: yeni kare hem grubun ilk karesine hem bir önceki kareye benzemeli
     groups, open_g = [], []

@@ -43,6 +43,8 @@ CREATE TABLE IF NOT EXISTS moves (
 );
 CREATE TABLE IF NOT EXISTS pins (path TEXT PRIMARY KEY);
 CREATE TABLE IF NOT EXISTS scene_pairs (a INTEGER, b INTEGER, inl INTEGER, ratio REAL, PRIMARY KEY(a, b));
+CREATE TABLE IF NOT EXISTS scene_pairs2 (a INTEGER, b INTEGER, inl INTEGER, area REAL, overlap REAL, diff REAL,
+                                         PRIMARY KEY(a, b));
 CREATE TABLE IF NOT EXISTS jobs (
     id INTEGER PRIMARY KEY,
     title TEXT, status TEXT, progress REAL DEFAULT 0, message TEXT,
