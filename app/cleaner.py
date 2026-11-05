@@ -358,10 +358,10 @@ def apply():
     return True
 
 
-def _apply(keep_running=False):
+def _apply(keep_running=False, batch=None):
     try:
         groups = load_groups()
-        batch = datetime.now().strftime("%Y-%m-%d %H.%M")
+        batch = batch or datetime.now().strftime("%Y-%m-%d %H.%M")
         root = archive_root()
         todo = [(g, m) for g in groups if not g["skip"] for m in g["members"]
                 if m["id"] != g["keep"] and not m.get("locked")]

@@ -177,7 +177,8 @@ def _place_live(lives, s, prot, batch):
         photos = {r["id"]: dict(r) for r in con.execute("SELECT id, path FROM media WHERE kind='photo'")}
     for v in lives:
         p = photos.get(v["live_of"])
-        if not p or not os.path.isfile(v["path"]) or is_protected(v["path"], prot):
+        # Fotoğrafı arşivde (diskte) yoksa bu video parçasına dokunulmaz: normal video olarak kalır
+        if not p or not os.path.isfile(p["path"]) or not os.path.isfile(v["path"]) or is_protected(v["path"], prot):
             continue
         try:
             if s["live_mode"] == "trash" and cleaner.TRASH_DIR:
@@ -262,9 +263,9 @@ def apply_and_organize():
         state.update(running=True, phase="Çöp kutusuna taşınıyor", done=0, todo=0, error=None, kind="apply")
 
     def go():
-        batch = datetime.now().strftime("%Y-%m-%d %H.%M")
+        batch = datetime.now().strftime("%Y-%m-%d %H.%M") + " Elle temizlik"
         try:
-            cleaner._apply(keep_running=True)
+            cleaner._apply(keep_running=True, batch=batch)
             organize_files(batch)
             save_settings(auto=True, last_full=batch)
             state.update(phase="Tamamlandı", last_run=batch)
@@ -288,7 +289,8 @@ def run(full=True, apply_trash=True, scope=None):
 
 
 def _run(full, apply_trash, scope):
-    batch = datetime.now().strftime("%Y-%m-%d %H.%M")
+    # Her tur çöp kutusunda kendi klasörüne gider: "2026-11-05 14.30 Gelen" / "... Arşiv taraması"
+    batch = datetime.now().strftime("%Y-%m-%d %H.%M") + (" Arşiv taraması" if full else " Gelen")
     try:
         s = settings()
         os.makedirs(abs_dir(s["inbox"]), exist_ok=True)
@@ -297,7 +299,7 @@ def _run(full, apply_trash, scope):
         state["phase"] = "Kopyalar aranıyor"
         cleaner._find(s["include_bursts"], keep_running=True, include_similar=s["include_similar"])
         if apply_trash:
-            cleaner._apply(keep_running=True)
+            cleaner._apply(keep_running=True, batch=batch)
             organize_files(batch)
             if full:
                 save_settings(auto=True, last_full=batch)
