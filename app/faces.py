@@ -17,7 +17,10 @@ import numpy as np
 from . import db
 
 SAME_PERSON = 0.55      # aynı kişi eşiği (dlib için önerilen 0.6; biraz daha sıkı)
-CLUSTER_JOIN = 0.50     # bir yüzü mevcut kişiye eklemek için
+CLUSTER_JOIN = 0.45     # bir yüzü mevcut kişiye eklemek için
+GROUP_DIST = 0.45       # kişileri baştan kurarken iki yüzü bağlamak için
+MIN_FACE_PX = 80        # kişilere eklenecek en küçük yüz (piksel); küçük/uzak/bulanık yüzler karışıklık yaratır
+GROUPING_VERSION = 2
 MIN_FACE_FRAC = 0.035   # resmin kısa kenarına göre en küçük yüz (çok küçük/arka plandaki yüzler sayılmaz)
 ANALYSIS_SIDE = 1200
 
@@ -109,12 +112,88 @@ def same_people(fa, fb):
 
 # ---------- Kişiler (gruplama) ----------
 
+def _px(r):
+    """Yüzün analiz edilen resimdeki yaklaşık genişliği (piksel)."""
+    W, H = r["width"] or ANALYSIS_SIDE, r["height"] or ANALYSIS_SIDE
+    sc = min(1.0, ANALYSIS_SIDE / max(W, H))
+    return r["w"] * (W * H) ** 0.5 * sc
+
+
+def recluster():
+    """Kişileri baştan kurar (Chinese Whispers: ortalamaya değil, yüzlerin birbirine benzerliğine bakar;
+    bir grup zamanla alakasız yüzleri toplayan bir çöp kutusuna dönüşmez). Verilen isimler ve gizlenen
+    kişiler korunur; "bu kişi değil" denen yüzler o kişiye geri dönmez."""
+    import dlib
+    from collections import Counter, defaultdict
+    with db.db() as con:
+        rows = [dict(r) for r in con.execute(
+            "SELECT f.id, f.emb, f.w, f.person_id, m.width, m.height FROM faces f JOIN media m ON m.id=f.media_id")]
+        people = {r["id"]: dict(r) for r in con.execute("SELECT id, name, hidden FROM people")}
+        rej = defaultdict(set)
+        for r in con.execute("SELECT face_id, person_id FROM face_reject"):
+            rej[r[0]].add(r[1])
+    good = [r for r in rows if _px(r) >= MIN_FACE_PX]
+    small = [r["id"] for r in rows if _px(r) < MIN_FACE_PX]
+    state["phase"] = f"Kişiler yeniden gruplanıyor ({len(good)} yüz)"
+    labels = dlib.chinese_whispers_clustering(
+        [dlib.vector(np.frombuffer(r["emb"], np.float32).astype(float).tolist()) for r in good], GROUP_DIST) if good else []
+    groups = defaultdict(list)
+    for r, lab in zip(good, labels):
+        groups[lab].append(r)
+    keep = {pid for pid, p in people.items() if p["name"] or p["hidden"]}   # isimli / gizli kişiler kalır
+    assign = [(0, i) for i in small]
+    # her isimli kişi en çok yüzünü içeren TEK gruba geçer (başka gruplar "İsimsiz" olur; aynı isim verilirse birleşir)
+    best = {}
+    for lab, mem in groups.items():
+        votes = Counter(r["person_id"] for r in mem if r["person_id"] in keep)
+        if votes:
+            cand, n = votes.most_common(1)[0]
+            if n >= 0.5 * len(mem) and n > best.get(cand, (0, None))[0]:
+                best[cand] = (n, lab)
+    owner = {lab: pid for pid, (n, lab) in best.items()}
+    with db.db() as con:
+        for lab, mem in groups.items():
+            pid = owner.get(lab)
+            if pid is None:
+                pid = con.execute("INSERT INTO people(name) VALUES(NULL)").lastrowid
+            other = None
+            for r in mem:
+                if pid in rej.get(r["id"], ()):
+                    if other is None:
+                        other = con.execute("INSERT INTO people(name) VALUES(NULL)").lastrowid
+                    assign.append((other, r["id"]))
+                else:
+                    assign.append((pid, r["id"]))
+        con.executemany("UPDATE faces SET person_id=? WHERE id=?", assign)
+        con.execute("DELETE FROM people WHERE name IS NULL AND id NOT IN (SELECT DISTINCT person_id FROM faces WHERE person_id > 0)")
+        con.execute("""UPDATE people SET cover=(SELECT f.id FROM faces f WHERE f.person_id=people.id
+                       ORDER BY f.w*f.h DESC LIMIT 1)""")
+    with open(_marker(), "w") as f:
+        f.write(str(GROUPING_VERSION))
+    return len(groups)
+
+
+def _marker():
+    from .config import DATA_DIR
+    return os.path.join(DATA_DIR, "kisiler-gruplama.txt")
+
+
+def _grouping_old():
+    try:
+        return int(open(_marker()).read().strip() or 0) < GROUPING_VERSION
+    except Exception:
+        return True
+
 def cluster(progress=None):
     """Kişisi atanmamış yüzleri mevcut kişilere ekler ya da yeni kişiler oluşturur."""
     with db.db() as con:
         people = [dict(r) for r in con.execute("SELECT id FROM people")]
-        known = con.execute("SELECT person_id, emb FROM faces WHERE person_id IS NOT NULL").fetchall()
-        new = con.execute("SELECT id, emb FROM faces WHERE person_id IS NULL ORDER BY id").fetchall()
+        known = con.execute("SELECT person_id, emb FROM faces WHERE person_id > 0").fetchall()
+        new = con.execute("SELECT f.id, f.emb, f.w, m.width, m.height FROM faces f JOIN media m ON m.id=f.media_id "
+                          "WHERE f.person_id IS NULL ORDER BY f.id").fetchall()
+        small = [r["id"] for r in new if _px(r) < MIN_FACE_PX]
+        con.executemany("UPDATE faces SET person_id=0 WHERE id=?", [(i,) for i in small])   # 0 = kişilere katılmaz
+        new = [r for r in new if _px(r) >= MIN_FACE_PX]
         rej = {}
         for r in con.execute("SELECT face_id, person_id FROM face_reject"):
             rej.setdefault(r[0], set()).add(r[1])
@@ -208,6 +287,8 @@ def run_all():
                 analyze(part, lambda d, t, k=k: state.update(done=k + d))
                 cluster()
             state["phase"] = "Yüzler kişilere ayrılıyor"
+            if _grouping_old():
+                recluster()
             cluster()
             state["phase"] = "Tamamlandı"
         except Exception as e:
@@ -226,7 +307,7 @@ def _boot():
     try:
         with db.db() as con:
             n = con.execute("SELECT COUNT(*) FROM media WHERE kind='photo' AND (faces_done IS NULL OR faces_done=-1)").fetchone()[0]
-        if n:
+        if n or _grouping_old():
             run_all()
     except Exception:
         traceback.print_exc()
