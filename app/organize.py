@@ -1,9 +1,11 @@
 """Arşiv düzenleyici.
 
 Hedef yapı (arşiv kökü = /DATA/Media):
-    Resimler/<yıl>/...      tüm fotoğraflar
-    Videolar/<yıl>/...      tüm videolar
-    Resimler/Tarihsiz, Videolar/Tarihsiz   çekim tarihi bilinmeyenler
+    Photos/<yıl>/...        tüm fotoğraflar
+    video/<yıl>/...         tüm videolar
+    Photos/Tarihsiz, video/Tarihsiz   çekim tarihi bilinmeyenler
+    Arşiv/Gelen             yeni dosyalar buraya atılır
+    Arşiv/Ekran ve Kaydedilenler/Resimler|Videolar/<yıl>   ekran görüntüleri, kaydedilenler
 Korunan klasörler (ör. "kenan dugun", "Necla video") olduğu gibi kalır: içlerindeki dosyalar
 taşınmaz ve asla çöpe atılmaz.
 Gelen kutusu (Gelen): yeni dosyalar buraya atılır; birkaç dakikada bir işlenir — kopyalar çöpe,
@@ -23,10 +25,10 @@ from .config import DATA_DIR, MEDIA_DIRS, TRASH_DIR
 
 SETTINGS_FILE = os.path.join(DATA_DIR, "ayarlar.json")
 DEFAULTS = {
-    "photos_dir": "Resimler",
-    "videos_dir": "Videolar",
-    "inbox": "Gelen",
-    "other_dir": "Ekran ve Kaydedilenler",
+    "photos_dir": "Photos",
+    "videos_dir": "video",
+    "inbox": "Arşiv/Gelen",
+    "other_dir": "Arşiv/Ekran ve Kaydedilenler",
     "protected": ["video/kenan dugun", "video/Necla video", "Photos/muzaffer resim"],
     "include_bursts": True,
     "include_similar": True,
@@ -35,6 +37,9 @@ DEFAULTS = {
     "auto": False,          # ilk büyük temizlikten sonra açılır
     "last_full": None,
 }
+# Eski klasör düzeni → yeni düzen (kayıtlı ayarlar kendiliğinden güncellenir)
+OLD_LAYOUT = {"photos_dir": "Resimler", "videos_dir": "Videolar", "inbox": "Gelen",
+              "other_dir": "Ekran ve Kaydedilenler"}
 state = cleaner.state
 _lock = threading.Lock()
 
@@ -46,6 +51,9 @@ def settings():
             s.update(json.load(f))
     except (OSError, json.JSONDecodeError):
         pass
+    for k, old in OLD_LAYOUT.items():
+        if s.get(k) == old:
+            s[k] = DEFAULTS[k]
     return s
 
 
@@ -87,7 +95,9 @@ def candidate_folders():
     for r in rows:
         rel = os.path.relpath(r["folder"], r0)
         parts = rel.split("/")
-        if parts[0] in skip or len(parts) < 2:
+        if len(parts) < 2 or any(rel == d or rel.startswith(d + "/") for d in skip) \
+                or parts[0] == s["inbox"].split("/")[0] \
+                or (parts[0] in (s["photos_dir"], s["videos_dir"]) and (parts[1].isdigit() or parts[1] == "Tarihsiz")):
             continue
         key = "/".join(parts[:2])
         agg[key] = agg.get(key, 0) + r["n"]
@@ -129,7 +139,7 @@ def _mv(src, dst):
 
 
 def organize_files(batch):
-    """Korunmayan, yerinde olmayan her dosyayı Resimler/<yıl> veya Videolar/<yıl>'a taşır."""
+    """Korunmayan, yerinde olmayan her dosyayı Photos/<yıl> veya video/<yıl>'a taşır."""
     s = settings()
     prot = protected_dirs(s)
     with db.db() as con:
@@ -146,7 +156,7 @@ def organize_files(batch):
         dst_dir = target_for(r, s)
         if r["folder"] != dst_dir:
             todo.append((r, dst_dir))
-    state.update(phase="Resimler ve Videolar klasörlerine yerleştiriliyor", todo=len(todo), done=0)
+    state.update(phase="Photos ve video klasörlerine yıllara göre yerleştiriliyor", todo=len(todo), done=0)
     moved = 0
     for r, dst_dir in todo:
         try:
@@ -251,8 +261,9 @@ def _place_live(lives, s, prot, batch):
 
 def _remove_empty_dirs(prot, s):
     """Taşımadan sonra boş kalan eski klasörleri kaldırır (korunanlar, kökler ve Gelen hariç)."""
-    keep = {d.rstrip("/") for d in MEDIA_DIRS} | {abs_dir(s["inbox"]), abs_dir(s["photos_dir"]),
-                                                 abs_dir(s["videos_dir"]), abs_dir(s["other_dir"])}
+    cur = {abs_dir(s["inbox"]), abs_dir(s["photos_dir"]), abs_dir(s["videos_dir"]), abs_dir(s["other_dir"])}
+    old = {abs_dir(v) for v in OLD_LAYOUT.values()} - cur      # eski düzenin klasörleri boşalınca kaldırılır
+    keep = ({d.rstrip("/") for d in MEDIA_DIRS} - old) | cur
     junk = {".DS_Store", "Thumbs.db", "desktop.ini"}
     for base in MEDIA_DIRS:
         for d, dirs, files in os.walk(base, topdown=False):
@@ -266,6 +277,35 @@ def _remove_empty_dirs(prot, s):
                     os.rmdir(d)
             except OSError:
                 pass
+
+
+def migrate_layout():
+    """Eski Gelen ve 'Ekran ve Kaydedilenler' klasörlerini olduğu gibi Arşiv altına taşır (anında, aynı disk)
+    ve kayıtlardaki yolları günceller. Resimler/Videolar içindekiler sıradaki düzenlemede Photos/video'ya gider."""
+    s = settings()
+    for k in ("inbox", "other_dir"):
+        o, n = abs_dir(OLD_LAYOUT[k]), abs_dir(s[k])
+        if o == n or not os.path.isdir(o):
+            continue
+        if os.path.exists(n) and os.listdir(n):
+            continue        # ikisi de doluysa dosyalar tek tek düzenlemede taşınır
+        try:
+            os.makedirs(os.path.dirname(n), exist_ok=True)
+            if os.path.isdir(n):
+                os.rmdir(n)
+            os.rename(o, n)
+        except OSError:
+            traceback.print_exc()
+            continue
+        op, np_ = o.rstrip("/") + "/", n.rstrip("/") + "/"
+        L = len(op)
+        with db.db() as con:
+            con.execute("UPDATE media SET path=? || substr(path, ?) WHERE substr(path, 1, ?) = ?", (np_, L + 1, L, op))
+            con.execute("UPDATE media SET folder=? || substr(folder, ?) WHERE folder=? OR substr(folder, 1, ?) = ?",
+                        (n.rstrip("/"), L, o.rstrip("/"), L, op))
+            con.execute("UPDATE trash SET orig_path=? || substr(orig_path, ?) WHERE substr(orig_path, 1, ?) = ?",
+                        (np_, L + 1, L, op))
+        print(f"Klasör taşındı: {o} → {n}", flush=True)
 
 
 def undo_moves(batch):
@@ -403,4 +443,8 @@ def _watch():
             traceback.print_exc()
 
 
+try:
+    migrate_layout()
+except Exception:
+    traceback.print_exc()
 threading.Thread(target=_watch, daemon=True).start()

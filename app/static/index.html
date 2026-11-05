@@ -279,7 +279,7 @@ $('#inboxBtn').onclick=async()=>{await post('/api/clean/inbox');status()};
 $('#findBtn').onclick=async()=>{await post('/api/clean/find',{include_bursts:true,include_similar:true});status()};
 $('#applyBtn2').onclick=()=>$('#applyBtn').click();
 $('#applyBtn').onclick=async()=>{const m=ST.summary;
-  const msg=m.files?`${fmt(m.files)} dosya (${gb(m.bytes)}) çöp kutusuna taşınacak ve kalanlar Resimler/Videolar klasörlerine yerleştirilecek.`:'Çöpe gidecek kopya yok. Yerinde olmayan dosyalar (ör. canlı fotoğraf videoları) düzenlenecek.';
+  const msg=m.files?`${fmt(m.files)} dosya (${gb(m.bytes)}) çöp kutusuna taşınacak ve kalanlar Photos/video klasörlerine yıllara göre yerleştirilecek.`:'Çöpe gidecek kopya yok. Yerinde olmayan dosyalar (ör. canlı fotoğraf videoları) düzenlenecek.';
   if(!confirm(msg+`\n\nÇöp kutusundan / Son düzenlemeler'den her zaman geri alabilirsin. Devam edilsin mi?`))return;
   await post('/api/clean/apply');status()};
 
@@ -306,7 +306,7 @@ $('#groups').onclick=async e=>{const gEl=e.target.closest('.group');if(!gEl)retu
   const m=e.target.closest('.gm');if(m){const g=await post('/api/clean/groups/'+gid,{toggle:+m.dataset.m});gEl.outerHTML=groupHtml(g);status()}};
 
 async function loadMoves(){const r=await api('/api/moves');
-  $('#moves').innerHTML=r.length?r.map(b=>`<div class="row" style="padding:6px 0;border-bottom:1px solid var(--line)"><b>${b.batch}</b><span class="muted">${fmt(b.n)} dosya Resimler/Videolar'a taşındı${b.undone?` · ${fmt(b.undone)} geri alındı`:''}</span><span style="flex:1"></span>${b.undone<b.n?`<button class="ghost" data-undo="${b.batch}">Bu düzenlemeyi geri al</button>`:''}</div>`).join(''):'Henüz düzenleme yapılmadı.'}
+  $('#moves').innerHTML=r.length?r.map(b=>`<div class="row" style="padding:6px 0;border-bottom:1px solid var(--line)"><b>${b.batch}</b><span class="muted">${fmt(b.n)} dosya yerine taşındı${b.undone?` · ${fmt(b.undone)} geri alındı`:''}</span><span style="flex:1"></span>${b.undone<b.n?`<button class="ghost" data-undo="${b.batch}">Bu düzenlemeyi geri al</button>`:''}</div>`).join(''):'Henüz düzenleme yapılmadı.'}
 $('#moves').onclick=async e=>{const b=e.target.dataset.undo;if(!b)return;if(!confirm('Bu turda taşınan dosyalar eski klasörlerine geri dönsün mü? (Çöpe atılanlar için Çöp kutusunu kullan)'))return;
   const r=await post('/api/moves/undo',{batch:b});alert(fmt(r.undone)+' dosya eski yerine döndü');loadMoves()};
 

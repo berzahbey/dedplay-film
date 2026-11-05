@@ -8,7 +8,7 @@ services:
     environment:
       - TZ=Europe/Amsterdam
       # Tüm Media klasörü TEK bağlama noktası: taşımalar (çöp kutusu, düzenleme) anında olur
-      - MEDIA_DIRS=/archive/Photos,/archive/video,/archive/Resimler,/archive/Videolar,/archive/Ekran ve Kaydedilenler,/archive/Gelen
+      - MEDIA_DIRS=/archive/Photos,/archive/video,/archive/Arşiv,/archive/Resimler,/archive/Videolar,/archive/Ekran ve Kaydedilenler,/archive/Gelen
       - TRASH_DIR=/archive/Dedplay Çöp Kutusu
       # Eski sürümün kayıtlı yolları (yeniden tarama gerekmesin)
       - PATH_MIGRATE=/media/photos=/archive/Photos,/media/videos=/archive/video
