@@ -126,7 +126,6 @@ button.ghost.red{color:var(--bad);border-color:#5a2226}
     <div class="sticky">
       <div class="row">
         <span class="muted" id="libInfo"></span>
-        <label class="row muted" id="shortWrap"><input type="checkbox" id="libShort"> Sadece çok kısa videolar (4 sn'den kısa, tüm klasörlerden)</label>
         <span style="flex:1"></span>
         <button class="ghost" id="libSelMode">☑ Seçerek çöpe at</button>
       </div>
@@ -284,10 +283,9 @@ let secObs=null, moreObs=null, railObs=null;
 async function openLib(kind){
   lib={kind,years:[],sec:{},items:[],sel:new Set(),selMode:false};
   $('#libSelBar').classList.add('hide');$('#libSelMode').textContent='☑ Seçerek çöpe at';
-  $('#shortWrap').classList.toggle('hide',kind=='photo');if(kind=='photo')$('#libShort').checked=false;
   $('#libTitle').textContent={photo:'Tüm resimler',video:'Tüm videolar',other:'Ekran görüntüleri, ekran kayıtları ve başka yerlerden kaydedilenler'}[kind];
   await buildLib()}
-function shortQ(){return $('#libShort').checked&&lib.kind!='photo'?'&short=1':''}
+function shortQ(){return ''}
 async function buildLib(){
   [secObs,moreObs,railObs].forEach(o=>o&&o.disconnect());
   const ys=await api(`/api/library/years?kind=${lib.kind}${shortQ()}`);
@@ -335,7 +333,6 @@ $('#libSelMode').onclick=()=>{lib.selMode=!lib.selMode;$('#libSelBar').classList
   $('#libSelMode').textContent=lib.selMode?'✕ Seçimi bitir':'☑ Seçerek çöpe at';if(!lib.selMode){lib.sel.clear();libSel()}};
 $('#libAll').onclick=()=>{lib.items.forEach(i=>lib.sel.add(i.id));libSel()};
 $('#libNone').onclick=()=>{lib.sel.clear();libSel()};
-$('#libShort').onchange=()=>buildLib();
 $('#libTrash').onclick=async()=>{if(!confirm(`${fmt(lib.sel.size)} dosya çöp kutusuna taşınsın mı? (Çöp kutusundan geri alabilirsin)`))return;
   try{const r=await post('/api/library/trash',{ids:[...lib.sel]});alert(fmt(r.trashed)+' dosya çöp kutusuna taşındı');buildLib();status()}catch(e){alert('Hata: '+e.message)}};
 // sekme değişince sağ çubuk sadece galeride görünsün
