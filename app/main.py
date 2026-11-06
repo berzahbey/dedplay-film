@@ -5,7 +5,7 @@ import threading
 import subprocess
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from pydantic import BaseModel
 
 from . import cleaner, db, faces, organize, orient, planner, render, scanner, styles
@@ -472,6 +472,10 @@ def trash_thumb(tid: int):
         r = con.execute("SELECT media_id, kind, trash_path FROM trash WHERE id=?", (tid,)).fetchone()
     if not r:
         raise HTTPException(404)
+    if r["kind"] == "meta":   # Google bilgi dosyası (.json): simge
+        return Response('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" '
+                        'fill="#1b1f27"/><text x="50" y="58" font-family="sans-serif" font-size="20" fill="#e8b24a" '
+                        'text-anchor="middle">JSON</text></svg>', media_type="image/svg+xml")
     for f in os.listdir(THUMB_DIR):
         if f.startswith(f"{r['media_id']}_r"):
             return FileResponse(os.path.join(THUMB_DIR, f))

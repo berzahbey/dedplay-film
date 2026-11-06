@@ -412,6 +412,17 @@ def _sidecars(path):
     return out
 
 
+def trash_meta(jpath, media, batch):
+    """Google bilgi dosyasını (.json) çöp kutusuna taşır; bilgisi önceden dosyaya yazılmıştır."""
+    root = archive_root()
+    dst = _move(jpath, os.path.join(TRASH_DIR, batch, os.path.relpath(jpath, root)))
+    with db.db() as con:
+        con.execute("INSERT INTO trash(media_id,kind,orig_path,trash_path,size,taken_at,reason,keeper_path,"
+                    "extras,batch) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                    (None, "meta", jpath, dst, os.path.getsize(dst), media.get("taken_at"),
+                     "Google bilgi dosyası (tarih/konum dosyaya yazıldı)", media["path"], "[]", batch))
+
+
 def _move(src, dst):
     os.makedirs(os.path.dirname(dst), exist_ok=True)
     if os.path.exists(dst):

@@ -268,6 +268,23 @@ def _place_live(lives, s, prot, batch):
     return n
 
 
+def google_pass(batch):
+    """Google Takeout .json bilgi dosyaları: tarih/konum dosyaya yazılır, .json çöpe gider."""
+    if not TRASH_DIR:
+        return 0
+    from . import google_meta
+    with db.db() as con:
+        rows = [dict(r) for r in con.execute("SELECT id, path, taken_at FROM media")]
+    if not google_meta.has_any(rows):
+        return 0
+    state.update(phase="Google bilgi dosyaları (.json) fotoğraflara işleniyor", done=0, todo=len(rows))
+    n = google_meta.clean(rows, lambda jp, m: cleaner.trash_meta(jp, m, batch),
+                          lambda d, t: state.update(done=d, todo=t))
+    if n:
+        print(f"Google bilgi dosyası çöpe taşındı: {n}", flush=True)
+    return n
+
+
 def _remove_empty_dirs(prot, s):
     """Taşımadan sonra boş kalan eski klasörleri kaldırır (korunanlar, kökler ve Gelen hariç)."""
     cur = {abs_dir(s["inbox"]), abs_dir(s["photos_dir"]), abs_dir(s["videos_dir"]), abs_dir(s["other_dir"]),
@@ -460,6 +477,7 @@ def apply_and_organize():
         try:
             cleaner._apply(keep_running=True, batch=batch)
             organize_files(batch)
+            google_pass(batch)
             save_settings(auto=True, last_full=batch)
             state.update(phase="Tamamlandı", last_run=batch)
             _faces_later()
@@ -495,6 +513,7 @@ def _run(full, apply_trash, scope):
         if apply_trash:
             cleaner._apply(keep_running=True, batch=batch)
             organize_files(batch)
+            google_pass(batch)
             if full:
                 save_settings(auto=True, last_full=batch)
         state["phase"] = "Tamamlandı"
@@ -687,5 +706,27 @@ except Exception:
     traceback.print_exc()
 threading.Thread(target=fix_perms, daemon=True).start()
 threading.Thread(target=_feeds, daemon=True).start()
+
+
+def _google_soon():
+    """Güncellemeden sonra bir kez: arşivdeki Google .json dosyalarını hemen işle (6 saat beklemeden)."""
+    time.sleep(90)
+    while True:
+        with _lock:
+            if not state["running"] and not scanner.state["running"]:
+                state.update(running=True, phase="Google bilgi dosyaları", done=0, todo=0, error=None, kind="run")
+                break
+        time.sleep(30)
+    try:
+        google_pass(datetime.now().strftime("%Y-%m-%d %H.%M") + " Google bilgi dosyaları")
+        state["phase"] = "Tamamlandı"
+    except Exception as e:
+        traceback.print_exc()
+        state.update(error=str(e), phase="Hata")
+    finally:
+        state.update(running=False, finished=time.time())
+
+
+threading.Thread(target=_google_soon, daemon=True).start()
 threading.Thread(target=_migrate_soon, daemon=True).start()
 threading.Thread(target=_watch, daemon=True).start()
